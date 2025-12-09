@@ -6,7 +6,7 @@ import subprocess
 import platform
 import concurrent.futures
 import re
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple
 
 import requests
 import urllib3
@@ -29,11 +29,12 @@ def get_local_network() -> str:
         # e.g., 192.168.10.40 -> 192.168.10.0/24
         network = ipaddress.IPv4Interface(f"{local_ip}/24").network
         return str(network)
-    except Exception:
+    except (OSError, ValueError):
         return "192.168.0.0/24"  # Fallback default
 
 
-class HostDiscovery:
+class HostDiscovery:  # pylint: disable=too-few-public-methods
+    """Discovers live hosts in a network subnet using ping."""
     def __init__(self, subnet: str):
         self.subnet = subnet
         self.system = platform.system().lower()
@@ -93,7 +94,8 @@ class HostDiscovery:
         return sorted(live_hosts)
 
 
-class MacScanner:
+class MacScanner:  # pylint: disable=too-few-public-methods
+    """Queries ARP cache to retrieve MAC addresses and vendor information."""
     def __init__(self):
         self.arp_cache = {}
         self._refresh_arp()
@@ -123,7 +125,7 @@ class MacScanner:
 
         except (subprocess.CalledProcessError, OSError):
             # Could not run arp or parse output on this platform
-            return
+            pass
 
     def get_mac_info(self, ip: str) -> str:
         """
@@ -155,7 +157,8 @@ class MacScanner:
         return f"[{mac}]{vendor}"
 
 
-class PortScanner:
+class PortScanner:  # pylint: disable=too-few-public-methods
+    """Scans a host for open ports using socket connections."""
     def __init__(self, ports: List[int]):
         self.ports = ports
 
@@ -193,7 +196,8 @@ class PortScanner:
         return sorted(open_ports)
 
 
-class ServiceVerifier:
+class ServiceVerifier:  # pylint: disable=too-few-public-methods
+    """Verifies HTTP/HTTPS services and identifies running technologies."""
     def __init__(self, check_path: str = "/"):
         self.check_path = check_path
         # Normalize path
@@ -265,13 +269,10 @@ class ServiceVerifier:
         if "php" in headers.get("X-Powered-By", "").lower():
             hints.append("PHP")
 
-        # Simple regex for title is often robust enough for this level of scraping
+        # Extract title from HTML
         title_match = re.search(r"<title>(.*?)</title>", response.text, re.IGNORECASE)
         if title_match:
             title = title_match.group(1).strip()[:30]
             hints.append(f"Title: {title}")
 
-        if not hints:
-            return "Generic Web Server"
-
-        return ", ".join(hints)
+        return ", ".join(hints) if hints else "Generic Web Server"

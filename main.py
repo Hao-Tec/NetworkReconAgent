@@ -46,7 +46,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
+def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
     """Entry point for the CLI tool.
 
     This function initializes the environment and delegates work to
@@ -163,7 +163,8 @@ def main() -> None:
     print(Fore.YELLOW + "\n[3] Reconnaissance Complete." + Style.RESET_ALL)
 
     if found_services:
-        print(Fore.GREEN + f"\nSUMMARY: Found {len(found_services)} TARGET MATCHES:" + Style.RESET_ALL)
+        summary_msg = f"\nSUMMARY: Found {len(found_services)} TARGET MATCHES:"
+        print(Fore.GREEN + summary_msg + Style.RESET_ALL)
         for ip, url, status, fp in found_services:
             print(f" -> {url} [Status: {status}] | Tech: {fp}")
 
@@ -174,7 +175,9 @@ def main() -> None:
             + Style.RESET_ALL
         )
         for ip, url, status, fp in partial_matches:
-            print(f" -> {url} [Status: {status}] | Tech: {fp} (Root path works)" )
+            print(
+                f" -> {url} [Status: {status}] | Tech: {fp} (Root path works)"
+            )
 
     if not found_services and not partial_matches:
         print(Fore.RED + f"\nNo web services found matching path '{args.path}'." + Style.RESET_ALL)
