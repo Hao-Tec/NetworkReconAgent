@@ -1,15 +1,17 @@
+"""Scanner utilities for host discovery, MAC lookup and simple port scanning."""
+
 import ipaddress
 import socket
 import subprocess
 import platform
-import requests
 import concurrent.futures
-import warnings
 import re
 from typing import List, Tuple, Dict, Optional
+
+import requests
 import urllib3
 
-# Suppress InsecureRequestWarning
+# Suppress InsecureRequestWarning from urllib3/requests
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
@@ -51,10 +53,13 @@ class HostDiscovery:
             # Reduce output noise by capturing stdout/stderr
             command = ["ping", count_param, "1", timeout_param, timeout_value, ip]
             result = subprocess.run(
-                command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
             )
             return result.returncode == 0
-        except Exception:
+        except OSError:
             return False
 
     def scan(self, max_workers: int = 50) -> List[str]:
@@ -116,9 +121,9 @@ class MacScanner:
                     mac = match.group(2).replace("-", ":").upper()
                     self.arp_cache[ip] = mac
 
-        except Exception as e:
-            # print(f"Error refreshing ARP: {e}")
-            pass
+        except (subprocess.CalledProcessError, OSError):
+            # Could not run arp or parse output on this platform
+            return
 
     def get_mac_info(self, ip: str) -> str:
         """
@@ -130,7 +135,6 @@ class MacScanner:
 
         # Basic OUI lookup (Top common vendors)
         vendor = ""
-        oui = mac[:8]
 
         # Simple hardcoded lookup for example purposes
         # In a real tool, this would be a large database
@@ -162,12 +166,13 @@ class PortScanner:
         """
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(1.0)  # 1 second timeout for port check
+                sock.settimeout(1.0)
                 result = sock.connect_ex((ip, port))
                 if result == 0:
                     return port
-        except:
-            pass
+        except OSError:
+            # network error connecting to socket
+            return 0
         return 0
 
     def scan_host(self, ip: str) -> List[int]:
@@ -223,25 +228,20 @@ class ServiceVerifier:
                     # Fingerprinting logic
                     fingerprint = self._identify_service(response)
 
-                    if response.status_code in [200, 401, 403] or (
-                        response.status_code >= 300 and response.status_code < 400
+                    if response.status_code in (200, 401, 403) or (
+                        300 <= response.status_code < 400
                     ):
-                        status_type = (
-                            "FOUND" if path == self.check_path else "ROOT_ONLY"
-                        )
-                        # Special case: if we found Moodle explicitly in the fingerprint, upgrade confidence
+                        status_type = "FOUND" if path == self.check_path else "ROOT_ONLY"
+                        # Special case: if we found Moodle explicitly in the fingerprint,
+                        # upgrade confidence
                         if "Moodle" in fingerprint and status_type == "ROOT_ONLY":
-                            status_type = "FOUND_MATCH"  # Found the *service* even if path was fallback
+                            status_type = "FOUND_MATCH"
 
-                        return (
-                            status_type,
-                            target_url,
-                            response.status_code,
-                            fingerprint,
-                        )
+                        return status_type, target_url, response.status_code, fingerprint
 
                 except requests.RequestException:
-                    pass
+                    # network/HTTP error for this URL - try next
+                    continue
 
         return "NONE", "", 0, ""
 
@@ -253,7 +253,7 @@ class ServiceVerifier:
         text = response.text.lower()
         headers = response.headers
 
-        # Check Keywords in Body
+        # Check Keywords in Body/Headers
         if "moodle" in text:
             hints.append("Moodle (Content)")
         if "apache" in text or "apache" in headers.get("Server", "").lower():
@@ -265,19 +265,11 @@ class ServiceVerifier:
         if "php" in headers.get("X-Powered-By", "").lower():
             hints.append("PHP")
 
-        # Check Title
-        try:
-            from html.parser import HTMLParser
-
-            # Simple regex for title is often robust enough for this level of scraping
-            title_match = re.search(
-                "<title>(.*?)</title>", response.text, re.IGNORECASE
-            )
-            if title_match:
-                title = title_match.group(1).strip()[:30]  # Limit length
-                hints.append(f"Title: {title}")
-        except:
-            pass
+        # Simple regex for title is often robust enough for this level of scraping
+        title_match = re.search(r"<title>(.*?)</title>", response.text, re.IGNORECASE)
+        if title_match:
+            title = title_match.group(1).strip()[:30]
+            hints.append(f"Title: {title}")
 
         if not hints:
             return "Generic Web Server"
