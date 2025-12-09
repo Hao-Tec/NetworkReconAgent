@@ -37,7 +37,7 @@ It is the perfect tool for when you plug into a new network and need to answer: 
 
 1.  **Clone the Repository**
     ```bash
-    git clone https://github.com/YourUsername/NetworkReconAgent.git
+    git clone https://github.com/Hao-Tec/NetworkReconAgent.git
     cd NetworkReconAgent
     ```
 
