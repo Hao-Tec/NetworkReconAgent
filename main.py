@@ -46,25 +46,21 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+def main() -> (
+    None
+):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
     """Entry point for the CLI tool.
 
     This function initializes the environment and delegates work to
     smaller helper functions to keep complexity low for linting.
     """
     # Initialize colorama
+    # Initialize colorama
     init()
 
-    banner = (
-        Fore.CYAN
-        + "\n"
-        + "╔══════════════════════════════════════════╗\n"
-        + "║      Network Reconnaissance Agent        ║\n"
-        + "║      Moodle / Web Service Finder         ║\n"
-        + "╚══════════════════════════════════════════╝\n"
-        + Style.RESET_ALL
-    )
-    print(banner)
+    from banner import print_banner
+
+    print_banner()
 
     args = parse_args()
 
@@ -155,7 +151,11 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-man
                     + Style.RESET_ALL
                 )
                 if fingerprint:
-                    print(Fore.MAGENTA + f"          Detected: {fingerprint}" + Style.RESET_ALL)
+                    print(
+                        Fore.MAGENTA
+                        + f"          Detected: {fingerprint}"
+                        + Style.RESET_ALL
+                    )
                 found_services.append((ip, url, status_code, fingerprint))
             elif status_type == "ROOT_ONLY":
                 partial_matches.append((ip, url, status_code, fingerprint))
@@ -175,12 +175,14 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-man
             + Style.RESET_ALL
         )
         for ip, url, status, fp in partial_matches:
-            print(
-                f" -> {url} [Status: {status}] | Tech: {fp} (Root path works)"
-            )
+            print(f" -> {url} [Status: {status}] | Tech: {fp} (Root path works)")
 
     if not found_services and not partial_matches:
-        print(Fore.RED + f"\nNo web services found matching path '{args.path}'." + Style.RESET_ALL)
+        print(
+            Fore.RED
+            + f"\nNo web services found matching path '{args.path}'."
+            + Style.RESET_ALL
+        )
         print("However, the following hosts are alive: " + ", ".join(live_hosts))
         print("Tip: Try scanning all ports with nmap if you still can't find it.")
 
