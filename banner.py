@@ -110,9 +110,22 @@ def print_banner():
     l5 = r"██║ ╚████║███████╗   ██║   ╚███╔███╔╝╚██████╔╝██║  ██║██║  ██╗"
     l6 = r"╚═╝  ╚═══╝╚══════╝   ╚═╝    ╚══╝╚══╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝"
 
+    # RECON - Restoring the missing part
+    l7 = r"██████╗ ███████╗ ██████╗ ██████╗ ███╗   ██╗"
+    l8 = r"██╔══██╗██╔════╝██╔════╝██╔═══██╗████╗  ██║"
+    l9 = r"██████╔╝█████╗  ██║     ██║   ██║██╔██╗ ██║"
+    l10 = r"██╔══██╗██╔══╝  ██║     ██║   ██║██║╚██╗██║"
+    l11 = r"██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║"
+    l12 = r"╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝"
+
     banner_text = Text()
+    # NETWORK (Green)
     for line in [l1, l2, l3, l4, l5, l6]:
         banner_text.append(line + "\n", style="bold green")
+
+    # RECON (Cyan to contrast or White)
+    for line in [l7, l8, l9, l10, l11, l12]:
+        banner_text.append(line + "\n", style="bold white")
 
     panel = Panel(
         Align.center(banner_text),
