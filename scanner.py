@@ -47,7 +47,7 @@ def get_local_network() -> str:
             s.connect(("8.8.8.8", 80))
             local_ip = s.getsockname()[0]
 
-        for interface, addrs in psutil.net_if_addrs().items():
+        for _, addrs in psutil.net_if_addrs().items():
             for addr in addrs:
                 if addr.family == socket.AF_INET and addr.address == local_ip:
                     # Found our interface
@@ -89,12 +89,12 @@ class ArpScanner:  # pylint: disable=too-few-public-methods
             result = srp(packet, timeout=2, verbose=0)[0]
 
             live_hosts = []
-            for sent, received in result:
-                live_hosts.append(received.psrc)
+            for sent, _ in result:
+                live_hosts.append(sent.psrc)
 
             return sorted(live_hosts)
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             # Scapy might fail if no Npcap/privileges
             print(f"[!] ARP scan failed: {e}. Falling back to Ping.")
             return []
@@ -313,11 +313,11 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
                         300 <= response.status_code < 400
                     ):
                         # FALSE POSITIVE CHECK: Wildcard / Soft 404 detection
-                        # If we found a 200 OK, check if a random path also returns 200 OK with same content
+                        # If we found a 200 OK, check if a random path also returns 200 OK
                         if response.status_code == 200 and self._is_wildcard_response(
                             base_url, response
                         ):
-                            # matches wildcard behavior -> likely just a router login page for *any* URL
+                            # matches wildcard behavior -> likely just a router login page
                             continue
 
                         status_type = (

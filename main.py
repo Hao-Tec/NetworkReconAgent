@@ -63,7 +63,7 @@ def main() -> (
     # Initialize colorama
     init()
 
-    from banner import print_banner
+    from banner import print_banner  # pylint: disable=import-outside-toplevel
 
     print_banner()
 
