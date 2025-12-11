@@ -15,6 +15,7 @@ from scanner import (
     get_local_network,
     MacScanner,
 )
+from banner import print_banner
 
 
 def parse_args() -> argparse.Namespace:
@@ -62,8 +63,6 @@ def main() -> (
     # Initialize colorama
     # Initialize colorama
     init()
-
-    from banner import print_banner  # pylint: disable=import-outside-toplevel
 
     print_banner()
 
@@ -115,9 +114,9 @@ def main() -> (
     if not live_hosts:
         print(
             Fore.RED
-            + "[-] No live hosts found in "
-            + str(target_subnet)
-            + ". Check your network connection or subnet."
+            + "[-]"
+            + f" No live hosts found in {target_subnet}."
+            + " Check your network connection or subnet."
             + Style.RESET_ALL
         )
         sys.exit(0)

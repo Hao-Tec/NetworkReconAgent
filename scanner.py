@@ -89,8 +89,8 @@ class ArpScanner:  # pylint: disable=too-few-public-methods
             result = srp(packet, timeout=2, verbose=0)[0]
 
             live_hosts = []
-            for sent, _ in result:
-                live_hosts.append(sent.psrc)
+            for _, received in result:
+                live_hosts.append(received.psrc)
 
             return sorted(live_hosts)
 
@@ -313,11 +313,12 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
                         300 <= response.status_code < 400
                     ):
                         # FALSE POSITIVE CHECK: Wildcard / Soft 404 detection
-                        # If we found a 200 OK, check if a random path also returns 200 OK
+                        # If we found a 200 OK, check if a random path also returns 200 OK with same content
                         if response.status_code == 200 and self._is_wildcard_response(
                             base_url, response
                         ):
                             # matches wildcard behavior -> likely just a router login page
+                            # for *any* URL
                             continue
 
                         status_type = (
