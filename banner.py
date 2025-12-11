@@ -141,7 +141,7 @@ def print_banner():
         Align.center(banner_text),
         border_style="bold green",
         title="[bold yellow]v2.1 ULTIMATE[/bold yellow]",
-        subtitle="[bold red]Authorized Personnel Only[/bold red]\n[dim]CODED BY The TECHMASTER[/dim]",
+        subtitle="[bold red]Authorized Personnel Only[/bold red] | [dim]CODED BY The TECHMASTER[/dim]",
         padding=(1, 2),
     )
 
