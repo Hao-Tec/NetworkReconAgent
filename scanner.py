@@ -6,10 +6,23 @@ import subprocess
 import platform
 import concurrent.futures
 import re
+import uuid
 from typing import List, Tuple
 
 import requests
 import urllib3
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+try:
+    from scapy.all import ARP, Ether, srp
+
+    HAS_SCAPY = True
+except ImportError:
+    HAS_SCAPY = False
 
 # Suppress InsecureRequestWarning from urllib3/requests
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -17,24 +30,79 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def get_local_network() -> str:
     """
-    Determines the local network subnet (assuming /24).
+    Determines the local network subnet using psutil for accurate netmask.
     """
+    default_subnet = "192.168.0.0/24"
+
+    if not psutil:
+        return default_subnet
+
     try:
-        # Connect to a dummy external IP to get the interface IP (no data sent)
+        # Get active interface that has a default gateway
+        # This is a bit tricky, so we iterate through interfaces to find one with an IPv4
+        # that matches our local IP.
+
+        # simple heuristic: connect to 8.8.8.8 to find local IP
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
             local_ip = s.getsockname()[0]
 
-        # Create /24 subnet string
-        # e.g., 192.168.10.40 -> 192.168.10.0/24
-        network = ipaddress.IPv4Interface(f"{local_ip}/24").network
-        return str(network)
+        for interface, addrs in psutil.net_if_addrs().items():
+            for addr in addrs:
+                if addr.family == socket.AF_INET and addr.address == local_ip:
+                    # Found our interface
+                    # psutil returns netmask (e.g., 255.255.255.0)
+                    network = ipaddress.IPv4Network(
+                        f"{local_ip}/{addr.netmask}", strict=False
+                    )
+                    return str(network)
+
+        return default_subnet
+
     except (OSError, ValueError):
-        return "192.168.0.0/24"  # Fallback default
+        return default_subnet
+
+
+class ArpScanner:  # pylint: disable=too-few-public-methods
+    """Scans for hosts using ARP requests (faster replacement for Ping on local network)."""
+
+    def __init__(self, subnet: str):
+        self.subnet = subnet
+
+    def scan(self) -> List[str]:
+        """
+        Sends ARP broadcast to subnet and returns list of live IPs.
+        """
+        if not HAS_SCAPY:
+            print("[!] Scapy not found or failed to import. Falling back...")
+            return []
+
+        try:
+            print(f"[*] ARP Scanning {self.subnet}...")
+            # Create ARP request packet
+            arp = ARP(pdst=self.subnet)
+            ether = Ether(dst="ff:ff:ff:ff:ff:ff")
+            packet = ether / arp
+
+            # Send packet and wait for response
+            # timeout=2, verbose=0
+            result = srp(packet, timeout=2, verbose=0)[0]
+
+            live_hosts = []
+            for sent, received in result:
+                live_hosts.append(received.psrc)
+
+            return sorted(live_hosts)
+
+        except Exception as e:
+            # Scapy might fail if no Npcap/privileges
+            print(f"[!] ARP scan failed: {e}. Falling back to Ping.")
+            return []
 
 
 class HostDiscovery:  # pylint: disable=too-few-public-methods
-    """Discovers live hosts in a network subnet using ping."""
+    """Discovers live hosts in a network subnet using ARP (local) or Ping."""
+
     def __init__(self, subnet: str):
         self.subnet = subnet
         self.system = platform.system().lower()
@@ -65,18 +133,24 @@ class HostDiscovery:  # pylint: disable=too-few-public-methods
 
     def scan(self, max_workers: int = 50) -> List[str]:
         """
-        Scans the subnet for live hosts using thread pool.
+        Scans the subnet for live hosts. Uses ARP if capable, otherwise Ping.
         """
+        # Try ARP first if Scapy is available
+        if HAS_SCAPY:
+            # Check if subnet is manageable size for ARP (usually always is true for local)
+            arp_scanner = ArpScanner(self.subnet)
+            hosts = arp_scanner.scan()
+            if hosts:
+                return hosts
+            # If ARP returned nothing, might be failure or remote network, fall through to Ping
+
+        # Fallback to Ping Scanner
         live_hosts = []
         try:
             network = ipaddress.ip_network(self.subnet, strict=False)
-            # Skip network and broadcast addresses for common /24s,
-            # though iterating over .hosts() handles this for us cleanly.
             hosts = [str(ip) for ip in network.hosts()]
 
-            print(
-                f"[*] Discovering hosts in {self.subnet} ({len(hosts)} potential IPs)..."
-            )
+            print(f"[*] Ping Scanning {self.subnet} ({len(hosts)} IPs)...")
 
             with concurrent.futures.ThreadPoolExecutor(
                 max_workers=max_workers
@@ -96,6 +170,7 @@ class HostDiscovery:  # pylint: disable=too-few-public-methods
 
 class MacScanner:  # pylint: disable=too-few-public-methods
     """Queries ARP cache to retrieve MAC addresses and vendor information."""
+
     def __init__(self):
         self.arp_cache = {}
         self._refresh_arp()
@@ -159,6 +234,7 @@ class MacScanner:  # pylint: disable=too-few-public-methods
 
 class PortScanner:  # pylint: disable=too-few-public-methods
     """Scans a host for open ports using socket connections."""
+
     def __init__(self, ports: List[int]):
         self.ports = ports
 
@@ -198,6 +274,7 @@ class PortScanner:  # pylint: disable=too-few-public-methods
 
 class ServiceVerifier:  # pylint: disable=too-few-public-methods
     """Verifies HTTP/HTTPS services and identifies running technologies."""
+
     def __init__(self, check_path: str = "/"):
         self.check_path = check_path
         # Normalize path
@@ -235,13 +312,28 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
                     if response.status_code in (200, 401, 403) or (
                         300 <= response.status_code < 400
                     ):
-                        status_type = "FOUND" if path == self.check_path else "ROOT_ONLY"
+                        # FALSE POSITIVE CHECK: Wildcard / Soft 404 detection
+                        # If we found a 200 OK, check if a random path also returns 200 OK with same content
+                        if response.status_code == 200 and self._is_wildcard_response(
+                            base_url, response
+                        ):
+                            # matches wildcard behavior -> likely just a router login page for *any* URL
+                            continue
+
+                        status_type = (
+                            "FOUND" if path == self.check_path else "ROOT_ONLY"
+                        )
                         # Special case: if we found Moodle explicitly in the fingerprint,
                         # upgrade confidence
                         if "Moodle" in fingerprint and status_type == "ROOT_ONLY":
                             status_type = "FOUND_MATCH"
 
-                        return status_type, target_url, response.status_code, fingerprint
+                        return (
+                            status_type,
+                            target_url,
+                            response.status_code,
+                            fingerprint,
+                        )
 
                 except requests.RequestException:
                     # network/HTTP error for this URL - try next
@@ -249,30 +341,101 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
 
         return "NONE", "", 0, ""
 
+    def _is_wildcard_response(
+        self, base_url: str, original_response: requests.Response
+    ) -> bool:
+        """
+        Checks if the server returns similar successful responses for non-existent paths.
+        Returns True if the 'original_response' is likely a False Positive (wildcard).
+        """
+        try:
+            # Generate a random path that shouldn't exist
+            random_path = f"/{uuid.uuid4()}"
+            random_url = f"{base_url}{random_path}"
+
+            random_response = requests.get(
+                random_url, timeout=3, allow_redirects=True, verify=False
+            )
+
+            # If the random path is NOT 200, then the server is normal (honest 404s)
+            # So the original 200 meant something real.
+            if random_response.status_code != 200:
+                return False
+
+            # If random path IS 200, the server is a "Wildcard Host" (returns 200 for everything)
+            # We must compare the content to see if the original path provided unique content.
+
+            # 1. Compare Content Length (Allow 5% variance for dynamic timestamps etc)
+            orig_len = len(original_response.content)
+            rand_len = len(random_response.content)
+
+            if orig_len == 0 or rand_len == 0:
+                return True  # Suspicious empty responses
+
+            diff_percent = abs(orig_len - rand_len) / max(orig_len, rand_len)
+            if diff_percent < 0.05:
+                # Content length is basically the same -> Likely same page
+                return True
+
+            # 2. Compare Titles (Strongest check)
+            orig_title = self._get_title(original_response.text)
+            rand_title = self._get_title(random_response.text)
+
+            if orig_title == rand_title:
+                return True  # Same title -> Likely same page
+
+            # If length differs signficantly AND title differs -> It's a Real Page
+            return False
+
+        except requests.RequestException:
+            return False  # Verification failed, assume original was real to be safe
+
+    def _get_title(self, html: str) -> str:
+        match = re.search(r"<title>(.*?)</title>", html, re.IGNORECASE)
+        return match.group(1).strip() if match else ""
+
     def _identify_service(self, response: requests.Response) -> str:
         """
-        Analyzes headers and body to identify the technology.
+        Analyzes headers and body to identify the technology and version.
         """
         hints = []
-        text = response.text.lower()
+        text = response.text
+        lower_text = text.lower()
         headers = response.headers
 
-        # Check Keywords in Body/Headers
-        if "moodle" in text:
-            hints.append("Moodle (Content)")
-        if "apache" in text or "apache" in headers.get("Server", "").lower():
-            hints.append("Apache")
-        if "iis" in text or "iis" in headers.get("Server", "").lower():
-            hints.append("IIS")
-        if "nginx" in headers.get("Server", "").lower():
-            hints.append("Nginx")
-        if "php" in headers.get("X-Powered-By", "").lower():
-            hints.append("PHP")
+        # 1. Technology Signatures (Keyword match)
+        technologies = {
+            "Moodle": ["moodle", "pluginfile.php"],
+            "WordPress": ["wordpress", "wp-content"],
+            "Joomla": ["joomla"],
+            "Drupal": ["drupal"],
+            "Canvas": ["canvas", "instructure"],
+            "Blackboard": ["blackboard"],
+        }
 
-        # Extract title from HTML
-        title_match = re.search(r"<title>(.*?)</title>", response.text, re.IGNORECASE)
+        for tech, keywords in technologies.items():
+            if any(k in lower_text for k in keywords):
+                # Try to find version using regex
+                param_str = ""
+                # Moodle version regex examples: "Moodle 3.11", "var M.cfg = ... version"
+                if tech == "Moodle":
+                    # Look for explicit text or meta tags
+                    v_match = re.search(r"Moodle (\d+(\.\d+)+)", text, re.IGNORECASE)
+                    if v_match:
+                        param_str = f" v{v_match.group(1)}"
+
+                hints.append(f"{tech}{param_str}")
+
+        # 2. Server Headers
+        if "server" in headers:
+            hints.append(headers["server"])
+        if "x-powered-by" in headers:
+            hints.append(headers["x-powered-by"])
+
+        # 3. HTML Title
+        title_match = re.search(r"<title>(.*?)</title>", text, re.IGNORECASE)
         if title_match:
-            title = title_match.group(1).strip()[:30]
+            title = title_match.group(1).strip()[:40]  # Cap length
             hints.append(f"Title: {title}")
 
         return ", ".join(hints) if hints else "Generic Web Server"

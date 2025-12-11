@@ -34,11 +34,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--ports",
-        default="80,443,8080,8000,8888,3000",
+        default="80,443,8080,8000,8888,3000,5000,8443,9000",
         help=(
-            "Comma-separated list of ports to scan (default: "
-            "80,443,8080,8000,8888,3000)"
+            "Comma-separated list of ports to scan or ranges (e.g. 80,100-200). "
+            "Default includes common web ports."
         ),
+    )
+    parser.add_argument(
+        "--all-ports",
+        action="store_true",
+        help="Scan all ports (1-65535). DISCLAIMER: Very slow.",
     )
     parser.add_argument(
         "--path", default="/moodle/", help="URL path to check for (default: /moodle/)"
@@ -65,15 +70,31 @@ def main() -> (
     args = parse_args()
 
     # Parse ports
-    try:
-        target_ports = [int(p.strip()) for p in args.ports.split(",")]
-    except ValueError:
-        print(
-            Fore.RED
-            + "[!] Error: Invalid port format. Please use comma-separated numbers."
-            + Style.RESET_ALL
-        )
-        sys.exit(1)
+    # Parse ports
+    target_ports = []
+    if args.all_ports:
+        # Full range scan
+        target_ports = list(range(1, 65536))
+    else:
+        try:
+            for part in args.ports.split(","):
+                part = part.strip()
+                if "-" in part:
+                    start_port, end_port = map(int, part.split("-"))
+                    target_ports.extend(range(start_port, end_port + 1))
+                else:
+                    target_ports.append(int(part))
+
+            # Deduplicate and sort
+            target_ports = sorted(list(set(target_ports)))
+
+        except ValueError:
+            print(
+                Fore.RED
+                + "[!] Error: Invalid port format. Please use comma-separated numbers or ranges (e.g. 80-90)."
+                + Style.RESET_ALL
+            )
+            sys.exit(1)
 
     # Auto-detect subnet if not provided
     target_subnet = args.subnet or None
@@ -124,13 +145,26 @@ def main() -> (
     partial_matches = []
 
     # Prepare list of common paths to try
+    # Prepare list of common paths to try
     common_paths = [args.path]
-    if args.path != "/moodle/":
-        common_paths.append("/moodle/")
-    if args.path != "/":
-        common_paths.append("/")
-    if "/admin/" not in common_paths:
-        common_paths.append("/admin/")
+
+    # Expanded list for deep enumeration
+    defaults = [
+        "/",
+        "/moodle/",
+        "/moodle/login/",
+        "/moodle/admin/",
+        "/login/",
+        "/admin/",
+        "/wp-login.php",
+        "/dashboard/",
+        "/canvas/",
+        "/blackboard/",
+    ]
+
+    for p in defaults:
+        if p not in common_paths and args.path.rstrip("/") != p.rstrip("/"):
+            common_paths.append(p)
 
     for ip in live_hosts:
         print(f"    Scanning {ip}...", end="\r")

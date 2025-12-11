@@ -118,14 +118,24 @@ def print_banner():
     l11 = r"██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║"
     l12 = r"╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝"
 
+    # Calculate centering padding
+    network_lines = [l1, l2, l3, l4, l5, l6]
+    recon_lines = [l7, l8, l9, l10, l11, l12]
+
+    network_width = max(len(line) for line in network_lines)
+    recon_width = max(len(line) for line in recon_lines)
+
+    padding = (network_width - recon_width) // 2
+    pad_str = " " * max(0, padding)
+
     banner_text = Text()
     # NETWORK (Green)
-    for line in [l1, l2, l3, l4, l5, l6]:
+    for line in network_lines:
         banner_text.append(line + "\n", style="bold green")
 
     # RECON (Cyan to contrast or White)
-    for line in [l7, l8, l9, l10, l11, l12]:
-        banner_text.append(line + "\n", style="bold white")
+    for line in recon_lines:
+        banner_text.append(pad_str + line + "\n", style="bold white")
 
     panel = Panel(
         Align.center(banner_text),
