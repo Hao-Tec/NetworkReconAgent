@@ -6,6 +6,7 @@ scan ports and verify presence of web services.
 
 import argparse
 import sys
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from colorama import init, Fore, Style
 
 from scanner import (
@@ -166,33 +167,41 @@ def main() -> (
         if p not in common_paths and args.path.rstrip("/") != p.rstrip("/"):
             common_paths.append(p)
 
-    for ip in live_hosts:
-        print(f"    Scanning {ip}...", end="\r")
-        open_ports = scanner.scan_host(ip)
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+    ) as progress:
+        task = progress.add_task("[cyan]Scanning hosts...", total=len(live_hosts))
 
-        if not open_ports:
-            continue
+        for ip in live_hosts:
+            progress.update(task, description=f"[cyan]Scanning {ip}...")
+            open_ports = scanner.scan_host(ip)
 
-        for port in open_ports:
-            status_type, url, status_code, fingerprint = verifier.check_http(
-                ip, port, check_paths=common_paths
-            )
-
-            if status_type in ("FOUND", "FOUND_MATCH"):
-                print(
-                    Fore.GREEN
-                    + f"[SUCCESS] Found SERVICE at {url} (Status: {status_code})"
-                    + Style.RESET_ALL
-                )
-                if fingerprint:
-                    print(
-                        Fore.MAGENTA
-                        + f"          Detected: {fingerprint}"
-                        + Style.RESET_ALL
+            if open_ports:
+                for port in open_ports:
+                    status_type, url, status_code, fingerprint = verifier.check_http(
+                        ip, port, check_paths=common_paths
                     )
-                found_services.append((ip, url, status_code, fingerprint))
-            elif status_type == "ROOT_ONLY":
-                partial_matches.append((ip, url, status_code, fingerprint))
+
+                    if status_type in ("FOUND", "FOUND_MATCH"):
+                        print(
+                            Fore.GREEN
+                            + f"[SUCCESS] Found SERVICE at {url} (Status: {status_code})"
+                            + Style.RESET_ALL
+                        )
+                        if fingerprint:
+                            print(
+                                Fore.MAGENTA
+                                + f"          Detected: {fingerprint}"
+                                + Style.RESET_ALL
+                            )
+                        found_services.append((ip, url, status_code, fingerprint))
+                    elif status_type == "ROOT_ONLY":
+                        partial_matches.append((ip, url, status_code, fingerprint))
+
+            progress.advance(task)
 
     print(Fore.YELLOW + "\n[3] Reconnaissance Complete." + Style.RESET_ALL)
 
