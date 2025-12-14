@@ -8,6 +8,8 @@ from rich.live import Live
 from rich.ansi import AnsiDecoder
 from rich.text import Text
 from rich.panel import Panel
+from rich.layout import Layout
+from rich.live import Live
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.align import Align
 
@@ -23,9 +25,10 @@ def matrix_rain(duration=3.0):
 
     start_time = time.time()
 
-    # Simple rain simulation: printing rapidly to console
-    # A full TUI takeover is complex, so we cheat with fast scrolling text
-    # wrapping it in a layout to keep it contained if we wanted, but direct print is "hackier"
+    # Rain simulation using Rich Layout and Live display
+    # This prevents the "scrolling" effect by using a full-screen TUI update
+    layout = Layout()
+    lines = []
 
     try:
         while time.time() - start_time < duration:
