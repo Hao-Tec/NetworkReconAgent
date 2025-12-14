@@ -115,7 +115,10 @@ def main() -> (
 
     # Delegate main work to helper objects below
     discoverer = HostDiscovery(target_subnet)
-    live_hosts = discoverer.scan()
+    with console.status(
+        f"[bold cyan]Discovering hosts in {target_subnet}...", spinner="dots"
+    ):
+        live_hosts = discoverer.scan()
 
     if not live_hosts:
         print(
@@ -252,4 +255,8 @@ def main() -> (
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        console.print("\n[bold red][!] Operation cancelled by user.[/bold red]")
+        sys.exit(0)
