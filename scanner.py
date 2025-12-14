@@ -313,7 +313,8 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
                         300 <= response.status_code < 400
                     ):
                         # FALSE POSITIVE CHECK: Wildcard / Soft 404 detection
-                        # If we found a 200 OK, check if a random path also returns 200 OK with same content
+                        # If we found a 200 OK, check if a random path also
+                        # returns 200 OK with same content
                         if response.status_code == 200 and self._is_wildcard_response(
                             base_url, response
                         ):

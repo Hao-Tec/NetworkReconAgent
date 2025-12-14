@@ -90,7 +90,8 @@ def main() -> (
         except ValueError:
             print(
                 Fore.RED
-                + "[!] Error: Invalid port format. Please use comma-separated numbers or ranges (e.g. 80-90)."
+                + "[!] Error: Invalid port format. Please use comma-separated "
+                + "numbers or ranges (e.g. 80-90)."
                 + Style.RESET_ALL
             )
             sys.exit(1)
