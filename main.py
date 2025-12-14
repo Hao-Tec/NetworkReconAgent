@@ -7,10 +7,9 @@ scan ports and verify presence of web services.
 import argparse
 import sys
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
-from colorama import init, Fore, Style
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.table import Table
+from colorama import init, Fore, Style
 
 from scanner import (
     HostDiscovery,
@@ -173,40 +172,6 @@ def main() -> (
             common_paths.append(p)
 
     with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-    ) as progress:
-        task = progress.add_task("[cyan]Scanning hosts...", total=len(live_hosts))
-
-        for ip in live_hosts:
-            progress.update(task, description=f"[cyan]Scanning {ip}...")
-            open_ports = scanner.scan_host(ip)
-
-            if open_ports:
-                for port in open_ports:
-                    status_type, url, status_code, fingerprint = verifier.check_http(
-                        ip, port, check_paths=common_paths
-                    )
-
-                    if status_type in ("FOUND", "FOUND_MATCH"):
-                        print(
-                            Fore.GREEN
-                            + f"[SUCCESS] Found SERVICE at {url} (Status: {status_code})"
-                            + Style.RESET_ALL
-                        )
-                        if fingerprint:
-                            print(
-                                Fore.MAGENTA
-                                + f"          Detected: {fingerprint}"
-                                + Style.RESET_ALL
-                            )
-                        found_services.append((ip, url, status_code, fingerprint))
-                    elif status_type == "ROOT_ONLY":
-                        partial_matches.append((ip, url, status_code, fingerprint))
-
-            progress.advance(task)
         SpinnerColumn(style="bold cyan"),
         TextColumn("[bold blue]{task.description}"),
         BarColumn(bar_width=None, style="blue dim", complete_style="bold blue"),
@@ -214,7 +179,9 @@ def main() -> (
         transient=False,
     ) as progress:
 
-        scan_task = progress.add_task("[bold cyan]Scanning hosts...", total=len(live_hosts))
+        scan_task = progress.add_task(
+            "[bold cyan]Scanning hosts...", total=len(live_hosts)
+        )
 
         for ip in live_hosts:
             progress.update(scan_task, description=f"[bold cyan]Scanning {ip}...")
@@ -231,7 +198,8 @@ def main() -> (
 
                 if status_type in ("FOUND", "FOUND_MATCH"):
                     progress.console.print(
-                        f"[bold green][SUCCESS] Found SERVICE at {url} (Status: {status_code})[/bold green]"
+                        f"[bold green][SUCCESS] Found SERVICE at {url} "
+                        f"(Status: {status_code})[/bold green]"
                     )
                     if fingerprint:
                         progress.console.print(
@@ -246,7 +214,10 @@ def main() -> (
     print(Fore.YELLOW + "\n[3] Reconnaissance Complete." + Style.RESET_ALL)
 
     if found_services:
-        table = Table(title=f"SUMMARY: Found {len(found_services)} TARGET MATCHES", border_style="green")
+        table = Table(
+            title=f"SUMMARY: Found {len(found_services)} TARGET MATCHES",
+            border_style="green",
+        )
         table.add_column("URL", style="cyan")
         table.add_column("Status", style="green")
         table.add_column("Technology", style="magenta")
@@ -257,7 +228,10 @@ def main() -> (
         console.print(table)
 
     if partial_matches and not found_services:
-        table = Table(title=f"No exact matches for '{args.path}', but found WEB SERVERS", border_style="cyan")
+        table = Table(
+            title=f"No exact matches for '{args.path}', but found WEB SERVERS",
+            border_style="cyan",
+        )
         table.add_column("URL", style="cyan")
         table.add_column("Status", style="green")
         table.add_column("Technology", style="magenta")
