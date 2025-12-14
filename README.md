@@ -26,6 +26,7 @@ It is the perfect tool for when you plug into a new network and need to answer: 
 **v2.1 Updates**:
 
 - **⚡ ARP Scanning**: Extremely fast local network discovery using ARP requests (fallback to Ping for remote).
+- **🎨 Visual Overhaul**: New **Matrix Rain** startup code and beautiful **Rich** progress bars.
 - **🔢 Port Ranges**: Support for custom ranges (e.g., `--ports 100-200`) and `--all-ports` scanning.
 - **🕸️ Advanced Web Enum**: Auto-detects **Moodle**, **WordPress**, **Canvas**, **Blackboard** and extracts **versions**.
 
@@ -93,23 +94,31 @@ python main.py --all-ports
 ## 📊 Sample Output
 
 ```text
-╔══════════════════════════════════════════╗
-║      Network Reconnaissance Agent        ║
-║      Moodle / Web Service Finder         ║
-╚══════════════════════════════════════════╝
+  (Matrix Rain Animation...)
+
+  Authorized Personnel Only | CODED BY The TECHMASTER
 
 [*] Auto-detecting local network... 192.168.10.0/24
-[1] Discovering hosts...
 [+] Found 2 live hosts.
     - 192.168.10.2  [5C:4D:BF:5E:DD:80] (TP-Link)
     - 192.168.10.40 [AA:BB:CC:DD:EE:FF] (Dell)
 
-[2] Scanning ports and fingerprinting...
+[2] Scanning ports [80, 443, 3000...] and checking for '/moodle/'...
+
+ ⠼ Scanning hosts... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100%
+   Scanning 192.168.10.2...
+
 [SUCCESS] Found SERVICE at http://192.168.10.2:80/moodle/ (Status: 200)
           Detected: Moodle 4.1, Apache/2.4, PHP/8.1
 
-[SUMMARY] Targets Found: 1
- -> http://192.168.10.2:80/moodle/ [Status: 200] | Tech: Moodle (Content)
+[3] Reconnaissance Complete.
+
+SUMMARY: Found 1 TARGET MATCHES
++-----------------------------------+--------+--------------------------+
+| URL                               | Status | Technology               |
++-----------------------------------+--------+--------------------------+
+| http://192.168.10.2:80/moodle/    | 200    | Moodle 4.1, Apache/2.4   |
++-----------------------------------+--------+--------------------------+
 ```
 
 ## 🤝 Contributing
