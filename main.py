@@ -6,6 +6,9 @@ scan ports and verify presence of web services.
 
 import argparse
 import sys
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
+from rich.console import Console
+from rich.table import Table
 from colorama import init, Fore, Style
 
 from scanner import (
@@ -15,6 +18,9 @@ from scanner import (
     get_local_network,
     MacScanner,
 )
+from banner import print_banner
+
+console = Console()
 
 
 def parse_args() -> argparse.Namespace:
@@ -63,8 +69,6 @@ def main() -> (
     # Initialize colorama
     init()
 
-    from banner import print_banner  # pylint: disable=import-outside-toplevel
-
     print_banner()
 
     args = parse_args()
@@ -91,7 +95,8 @@ def main() -> (
         except ValueError:
             print(
                 Fore.RED
-                + "[!] Error: Invalid port format. Please use comma-separated numbers or ranges (e.g. 80-90)."
+                + "[!] Error: Invalid port format. Please use comma-separated "
+                + "numbers or ranges (e.g. 80-90)."
                 + Style.RESET_ALL
             )
             sys.exit(1)
@@ -115,9 +120,9 @@ def main() -> (
     if not live_hosts:
         print(
             Fore.RED
-            + "[-] No live hosts found in "
-            + str(target_subnet)
-            + ". Check your network connection or subnet."
+            + "[-]"
+            + f" No live hosts found in {target_subnet}."
+            + " Check your network connection or subnet."
             + Style.RESET_ALL
         )
         sys.exit(0)
@@ -166,50 +171,75 @@ def main() -> (
         if p not in common_paths and args.path.rstrip("/") != p.rstrip("/"):
             common_paths.append(p)
 
-    for ip in live_hosts:
-        print(f"    Scanning {ip}...", end="\r")
-        open_ports = scanner.scan_host(ip)
+    with Progress(
+        SpinnerColumn(style="bold cyan"),
+        TextColumn("[bold blue]{task.description}"),
+        BarColumn(bar_width=None, style="blue dim", complete_style="bold blue"),
+        TextColumn("[bold blue]{task.percentage:>3.0f}%"),
+        transient=False,
+    ) as progress:
 
-        if not open_ports:
-            continue
+        scan_task = progress.add_task(
+            "[bold cyan]Scanning hosts...", total=len(live_hosts)
+        )
 
-        for port in open_ports:
-            status_type, url, status_code, fingerprint = verifier.check_http(
-                ip, port, check_paths=common_paths
-            )
+        for ip in live_hosts:
+            progress.update(scan_task, description=f"[bold cyan]Scanning {ip}...")
+            open_ports = scanner.scan_host(ip)
 
-            if status_type in ("FOUND", "FOUND_MATCH"):
-                print(
-                    Fore.GREEN
-                    + f"[SUCCESS] Found SERVICE at {url} (Status: {status_code})"
-                    + Style.RESET_ALL
+            if not open_ports:
+                progress.advance(scan_task)
+                continue
+
+            for port in open_ports:
+                status_type, url, status_code, fingerprint = verifier.check_http(
+                    ip, port, check_paths=common_paths
                 )
-                if fingerprint:
-                    print(
-                        Fore.MAGENTA
-                        + f"          Detected: {fingerprint}"
-                        + Style.RESET_ALL
+
+                if status_type in ("FOUND", "FOUND_MATCH"):
+                    progress.console.print(
+                        f"[bold green][SUCCESS] Found SERVICE at {url} "
+                        f"(Status: {status_code})[/bold green]"
                     )
-                found_services.append((ip, url, status_code, fingerprint))
-            elif status_type == "ROOT_ONLY":
-                partial_matches.append((ip, url, status_code, fingerprint))
+                    if fingerprint:
+                        progress.console.print(
+                            f"[magenta]          Detected: {fingerprint}[/magenta]"
+                        )
+                    found_services.append((ip, url, status_code, fingerprint))
+                elif status_type == "ROOT_ONLY":
+                    partial_matches.append((ip, url, status_code, fingerprint))
+
+            progress.advance(scan_task)
 
     print(Fore.YELLOW + "\n[3] Reconnaissance Complete." + Style.RESET_ALL)
 
     if found_services:
-        summary_msg = f"\nSUMMARY: Found {len(found_services)} TARGET MATCHES:"
-        print(Fore.GREEN + summary_msg + Style.RESET_ALL)
+        table = Table(
+            title=f"SUMMARY: Found {len(found_services)} TARGET MATCHES",
+            border_style="green",
+        )
+        table.add_column("URL", style="cyan")
+        table.add_column("Status", style="green")
+        table.add_column("Technology", style="magenta")
+
         for ip, url, status, fp in found_services:
-            print(f" -> {url} [Status: {status}] | Tech: {fp}")
+            table.add_row(url, str(status), fp)
+
+        console.print(table)
 
     if partial_matches and not found_services:
-        print(
-            Fore.CYAN
-            + f"\nNo exact matches for '{args.path}', but found these WEB SERVERS:"
-            + Style.RESET_ALL
+        table = Table(
+            title=f"No exact matches for '{args.path}', but found WEB SERVERS",
+            border_style="cyan",
         )
+        table.add_column("URL", style="cyan")
+        table.add_column("Status", style="green")
+        table.add_column("Technology", style="magenta")
+
         for ip, url, status, fp in partial_matches:
-            print(f" -> {url} [Status: {status}] | Tech: {fp} (Root path works)")
+            table.add_row(url, str(status), f"{fp} (Root path works)")
+
+        console.print(table)
 
     if not found_services and not partial_matches:
         print(

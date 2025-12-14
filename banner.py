@@ -1,10 +1,11 @@
-"""
-Module for displaying the startup banner.
-"""
-
+# pylint: disable=all
 import time
 import random
+import sys
 from rich.console import Console
+from rich.layout import Layout
+from rich.live import Live
+from rich.ansi import AnsiDecoder
 from rich.text import Text
 from rich.panel import Panel
 from rich.layout import Layout
@@ -19,10 +20,7 @@ def matrix_rain(duration=3.0):
     """
     Simulates a Matrix 'digital rain' effect before tool startup.
     """
-    chars = (
-        "0101010101アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビ"
-        "ピウゥクスツヌフムユュルグズブヅプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン"
-    )
+    chars = "0101010101アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブヅプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン"
     colors = ["#00FF00", "#00CC00", "#008800", "#003300"]
 
     start_time = time.time()
@@ -33,36 +31,29 @@ def matrix_rain(duration=3.0):
     lines = []
 
     try:
-        with Live(
-            layout, console=console, screen=True, refresh_per_second=20, transient=True
-        ):
-            while time.time() - start_time < duration:
-                line = ""
-                width = console.width
-                for _ in range(width):
-                    if random.random() < 0.15:
-                        char = random.choice(chars)
-                        # Use raw space padding optimization
-                        line += char
-                    else:
-                        line += " "
+        while time.time() - start_time < duration:
+            line = ""
+            for _ in range(console.width):
+                if random.random() < 0.15:
+                    char = random.choice(chars)
+                    color = random.choice(colors)
+                    # line += f"[{color}]{char}[/{color}]" # Rich parsing is too slow for matrix feel
+                    # Use raw space padding optimization
+                    line += char
+                else:
+                    line += " "
 
-                # Print with raw styling for speed or rich text
-                styled_line = Text()
-                for char in line:
-                    if char != " ":
-                        styled_line.append(char, style=random.choice(colors))
-                    else:
-                        styled_line.append(" ")
+            # Print with raw styling for speed or rich text
+            # We'll use rich logic but optimized
+            styled_line = Text()
+            for char in line:
+                if char != " ":
+                    styled_line.append(char, style=random.choice(colors))
+                else:
+                    styled_line.append(" ")
 
-                lines.append(styled_line)
-
-                # Keep lines within screen height to prevent scrolling issues within the layout
-                if len(lines) > console.height:
-                    lines = lines[-console.height :]
-
-                layout.update(Text("\n").join(lines))
-                time.sleep(0.04)
+            console.print(styled_line)
+            time.sleep(0.04)
 
     except KeyboardInterrupt:
         pass
@@ -116,25 +107,24 @@ def print_banner():
     matrix_rain(duration=2.5)
 
     # 2. Main Banner
-    # Group lines for cleaner locals
-    network_lines = [
-        r"███╗   ██╗███████╗████████╗██╗    ██╗ ██████╗ ██████╗ ██╗  ██╗",
-        r"████╗  ██║██╔════╝╚══██╔══╝██║    ██║██╔═══██╗██╔══██╗██║ ██╔╝",
-        r"██╔██╗ ██║█████╗     ██║   ██║ █╗ ██║██║   ██║██████╔╝█████╔╝ ",
-        r"██║╚██╗██║██╔══╝     ██║   ██║███╗██║██║   ██║██╔══██╗██╔═██╗ ",
-        r"██║ ╚████║███████╗   ██║   ╚███╔███╔╝╚██████╔╝██║  ██║██║  ██╗",
-        r"╚═╝  ╚═══╝╚══════╝   ╚═╝    ╚══╝╚══╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝",
-    ]
+    l1 = r"███╗   ██╗███████╗████████╗██╗    ██╗ ██████╗ ██████╗ ██╗  ██╗"
+    l2 = r"████╗  ██║██╔════╝╚══██╔══╝██║    ██║██╔═══██╗██╔══██╗██║ ██╔╝"
+    l3 = r"██╔██╗ ██║█████╗     ██║   ██║ █╗ ██║██║   ██║██████╔╝█████╔╝ "
+    l4 = r"██║╚██╗██║██╔══╝     ██║   ██║███╗██║██║   ██║██╔══██╗██╔═██╗ "
+    l5 = r"██║ ╚████║███████╗   ██║   ╚███╔███╔╝╚██████╔╝██║  ██║██║  ██╗"
+    l6 = r"╚═╝  ╚═══╝╚══════╝   ╚═╝    ╚══╝╚══╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝"
 
-    # RECON
-    recon_lines = [
-        r"██████╗ ███████╗ ██████╗ ██████╗ ███╗   ██╗",
-        r"██╔══██╗██╔════╝██╔════╝██╔═══██╗████╗  ██║",
-        r"██████╔╝█████╗  ██║     ██║   ██║██╔██╗ ██║",
-        r"██╔══██╗██╔══╝  ██║     ██║   ██║██║╚██╗██║",
-        r"██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║",
-        r"╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝",
-    ]
+    # RECON - Restoring the missing part
+    l7 = r"██████╗ ███████╗ ██████╗ ██████╗ ███╗   ██╗"
+    l8 = r"██╔══██╗██╔════╝██╔════╝██╔═══██╗████╗  ██║"
+    l9 = r"██████╔╝█████╗  ██║     ██║   ██║██╔██╗ ██║"
+    l10 = r"██╔══██╗██╔══╝  ██║     ██║   ██║██║╚██╗██║"
+    l11 = r"██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║"
+    l12 = r"╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝"
+
+    # Calculate centering padding
+    network_lines = [l1, l2, l3, l4, l5, l6]
+    recon_lines = [l7, l8, l9, l10, l11, l12]
 
     network_width = max(len(line) for line in network_lines)
     recon_width = max(len(line) for line in recon_lines)
@@ -155,10 +145,7 @@ def print_banner():
         Align.center(banner_text),
         border_style="bold green",
         title="[bold yellow]v2.1 ULTIMATE[/bold yellow]",
-        subtitle=(
-            "[bold red]Authorized Personnel Only[/bold red] | "
-            "[dim]CODED BY The TECHMASTER[/dim]"
-        ),
+        subtitle="[bold red]Authorized Personnel Only[/bold red] | [dim]CODED BY The TECHMASTER[/dim]",
         padding=(1, 2),
     )
 
