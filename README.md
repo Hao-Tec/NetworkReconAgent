@@ -93,33 +93,7 @@ python main.py --all-ports
 
 ## 📊 Sample Output
 
-```text
-  (Matrix Rain Animation...)
-
-  Authorized Personnel Only | CODED BY The TECHMASTER
-
-[*] Auto-detecting local network... 192.168.10.0/24
-[+] Found 2 live hosts.
-    - 192.168.10.2  [5C:4D:BF:5E:DD:80] (TP-Link)
-    - 192.168.10.40 [AA:BB:CC:DD:EE:FF] (Dell)
-
-[2] Scanning ports [80, 443, 3000...] and checking for '/moodle/'...
-
- ⠼ Scanning hosts... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100%
-   Scanning 192.168.10.2...
-
-[SUCCESS] Found SERVICE at http://192.168.10.2:80/moodle/ (Status: 200)
-          Detected: Moodle 4.1, Apache/2.4, PHP/8.1
-
-[3] Reconnaissance Complete.
-
-SUMMARY: Found 1 TARGET MATCHES
-+-----------------------------------+--------+--------------------------+
-| URL                               | Status | Technology               |
-+-----------------------------------+--------+--------------------------+
-| http://192.168.10.2:80/moodle/    | 200    | Moodle 4.1, Apache/2.4   |
-+-----------------------------------+--------+--------------------------+
-```
+![Network Recon Agent Demo](assets/demo.svg)
 
 ## 🤝 Contributing
 
