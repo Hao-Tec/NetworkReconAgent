@@ -6,6 +6,7 @@ scan ports and verify presence of web services.
 
 import argparse
 import sys
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from colorama import init, Fore, Style
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
@@ -172,6 +173,40 @@ def main() -> (
             common_paths.append(p)
 
     with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+    ) as progress:
+        task = progress.add_task("[cyan]Scanning hosts...", total=len(live_hosts))
+
+        for ip in live_hosts:
+            progress.update(task, description=f"[cyan]Scanning {ip}...")
+            open_ports = scanner.scan_host(ip)
+
+            if open_ports:
+                for port in open_ports:
+                    status_type, url, status_code, fingerprint = verifier.check_http(
+                        ip, port, check_paths=common_paths
+                    )
+
+                    if status_type in ("FOUND", "FOUND_MATCH"):
+                        print(
+                            Fore.GREEN
+                            + f"[SUCCESS] Found SERVICE at {url} (Status: {status_code})"
+                            + Style.RESET_ALL
+                        )
+                        if fingerprint:
+                            print(
+                                Fore.MAGENTA
+                                + f"          Detected: {fingerprint}"
+                                + Style.RESET_ALL
+                            )
+                        found_services.append((ip, url, status_code, fingerprint))
+                    elif status_type == "ROOT_ONLY":
+                        partial_matches.append((ip, url, status_code, fingerprint))
+
+            progress.advance(task)
         SpinnerColumn(style="bold cyan"),
         TextColumn("[bold blue]{task.description}"),
         BarColumn(bar_width=None, style="blue dim", complete_style="bold blue"),
