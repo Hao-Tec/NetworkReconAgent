@@ -52,6 +52,9 @@ def parse_args() -> argparse.Namespace:
         help="Scan all ports (1-65535). DISCLAIMER: Very slow.",
     )
     parser.add_argument(
+        "--path", default="/moodle/", help="URL path to check for (default: /moodle/)"
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable full traceback for debugging.",
