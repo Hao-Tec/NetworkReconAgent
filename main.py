@@ -6,6 +6,7 @@ scan ports and verify presence of web services.
 
 import argparse
 import sys
+import concurrent.futures
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.console import Console
 from rich.table import Table
@@ -60,6 +61,52 @@ def parse_args() -> argparse.Namespace:
         help="Enable full traceback for debugging.",
     )
     return parser.parse_args()
+
+
+def process_host(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    ip: str,
+    scanner: "PortScanner",
+    verifier: "ServiceVerifier",
+    common_paths: list,
+    progress: Progress,
+    scan_task,
+) -> tuple:
+    """
+    Scans a single host for ports and services.
+    Returns a tuple of (found_services, partial_matches).
+    """
+    local_found = []
+    local_partial = []
+
+    # Updating description in parallel can cause flickering, so we keep it static
+    # progress.update(scan_task, description=f"[bold cyan]Scanning {ip}...")
+
+    open_ports = scanner.scan_host(ip)
+
+    if not open_ports:
+        progress.advance(scan_task)
+        return [], []
+
+    for port in open_ports:
+        status_type, url, status_code, fingerprint = verifier.check_http(
+            ip, port, check_paths=common_paths
+        )
+
+        if status_type in ("FOUND", "FOUND_MATCH"):
+            progress.console.print(
+                f"[bold green][SUCCESS] Found SERVICE at {url} "
+                f"(Status: {status_code})[/bold green]"
+            )
+            if fingerprint:
+                progress.console.print(
+                    f"[magenta]          Detected: {fingerprint}[/magenta]"
+                )
+            local_found.append((ip, url, status_code, fingerprint))
+        elif status_type == "ROOT_ONLY":
+            local_partial.append((ip, url, status_code, fingerprint))
+
+    progress.advance(scan_task)
+    return local_found, local_partial
 
 
 def main() -> (
@@ -196,33 +243,32 @@ def main() -> (
             "[bold cyan]Scanning hosts...", total=len(live_hosts)
         )
 
-        for ip in live_hosts:
-            progress.update(scan_task, description=f"[bold cyan]Scanning {ip}...")
-            open_ports = scanner.scan_host(ip)
+        # Parallel processing of hosts
+        # Cap workers at 10 to avoid overwhelming network/resources
+        max_workers = min(len(live_hosts), 10) or 1
 
-            if not open_ports:
-                progress.advance(scan_task)
-                continue
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_ip = {
+                executor.submit(
+                    process_host,
+                    ip,
+                    scanner,
+                    verifier,
+                    common_paths,
+                    progress,
+                    scan_task,
+                ): ip
+                for ip in live_hosts
+            }
 
-            for port in open_ports:
-                status_type, url, status_code, fingerprint = verifier.check_http(
-                    ip, port, check_paths=common_paths
-                )
-
-                if status_type in ("FOUND", "FOUND_MATCH"):
-                    progress.console.print(
-                        f"[bold green][SUCCESS] Found SERVICE at {url} "
-                        f"(Status: {status_code})[/bold green]"
-                    )
-                    if fingerprint:
-                        progress.console.print(
-                            f"[magenta]          Detected: {fingerprint}[/magenta]"
-                        )
-                    found_services.append((ip, url, status_code, fingerprint))
-                elif status_type == "ROOT_ONLY":
-                    partial_matches.append((ip, url, status_code, fingerprint))
-
-            progress.advance(scan_task)
+            for future in concurrent.futures.as_completed(future_to_ip):
+                try:
+                    found, partial = future.result()
+                    found_services.extend(found)
+                    partial_matches.extend(partial)
+                except Exception as exc:  # pylint: disable=broad-exception-caught
+                    if args.debug:
+                        print(f"Generated an exception: {exc}")
 
     print(Fore.YELLOW + "\n[3] Reconnaissance Complete." + Style.RESET_ALL)
 
