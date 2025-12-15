@@ -281,6 +281,10 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
         if not self.check_path.startswith("/"):
             self.check_path = "/" + self.check_path
 
+        # Initialize session for connection pooling
+        self.session = requests.Session()
+        self.session.verify = False
+
     def check_http(
         self, ip: str, port: int, check_paths: List[str] = None
     ) -> Tuple[str, str, int, str]:
@@ -302,7 +306,7 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
             for path in check_paths:
                 target_url = f"{base_url}{path}"
                 try:
-                    response = requests.get(
+                    response = self.session.get(
                         target_url, timeout=3, allow_redirects=True, verify=False
                     )
 
@@ -355,7 +359,7 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
             random_path = f"/{uuid.uuid4()}"
             random_url = f"{base_url}{random_path}"
 
-            random_response = requests.get(
+            random_response = self.session.get(
                 random_url, timeout=3, allow_redirects=True, verify=False
             )
 

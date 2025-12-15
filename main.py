@@ -121,7 +121,10 @@ def main() -> (
 
     # Delegate main work to helper objects below
     discoverer = HostDiscovery(target_subnet)
-    live_hosts = discoverer.scan()
+    with console.status(
+        f"[bold cyan]Discovering hosts in {target_subnet}...", spinner="dots"
+    ):
+        live_hosts = discoverer.scan()
 
     if not live_hosts:
         print(
