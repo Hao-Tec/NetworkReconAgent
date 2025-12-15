@@ -23,7 +23,7 @@ It is the perfect tool for when you plug into a new network and need to answer: 
 
 ## ✨ Key Features
 
-**v2.1 Updates**:
+**v2.2.1 Updates**:
 
 - **⚡ ARP Scanning**: Extremely fast local network discovery using ARP requests (fallback to Ping for remote).
 - **🎨 Visual Overhaul**: New **Matrix Rain** startup code and beautiful **Rich** progress bars.
