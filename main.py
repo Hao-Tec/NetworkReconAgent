@@ -145,10 +145,14 @@ def main() -> (
         print(f"    - {host} {Fore.CYAN}{mac_info}{Style.RESET_ALL}")
 
     # 2. Port Scanning & Service Verification
+    ports_display = str(target_ports)
+    if len(target_ports) > 15:
+        ports_display = f"[{target_ports[0]}...{target_ports[-1]}] ({len(target_ports)} ports)"
+
     print(
         "\n"
         + Fore.YELLOW
-        + f"[2] Scanning ports {target_ports} and checking for '{args.path}'..."
+        + f"[2] Scanning ports {ports_display} and checking for '{args.path}'..."
         + Style.RESET_ALL
     )
 
