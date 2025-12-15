@@ -54,6 +54,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--path", default="/moodle/", help="URL path to check for (default: /moodle/)"
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable full traceback for debugging.",
+    )
     return parser.parse_args()
 
 
@@ -69,11 +74,12 @@ def main() -> (
     # Initialize colorama
     init()
 
-    print_banner()
-
     args = parse_args()
 
-    # Parse ports
+    # Move banner here so debug args are parsed first (though banner is safe)
+    # Actually, we can just print banner after parsing args, but parsing args is fast.
+    print_banner()
+
     # Parse ports
     target_ports = []
     if args.all_ports:
@@ -258,5 +264,24 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        console.print("\n[bold red][!] Operation cancelled by user.[/bold red]")
+        print(Fore.RED + "\n[!] Interrupted by user." + Style.RESET_ALL)
         sys.exit(0)
+    except PermissionError:
+        print(
+            Fore.RED
+            + "\n[!] PERMISSION ERROR: Access Denied."
+            + "\n    This tool requires Administrator privileges for network scanning."
+            + "\n    Please restart your terminal as Administrator."
+            + Style.RESET_ALL
+        )
+        sys.exit(1)
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        if "--debug" in sys.argv:
+            raise
+        print(
+            Fore.RED
+            + f"\n[!] Unexpected Error: {e}"
+            + "\n    Use --debug to see full traceback."
+            + Style.RESET_ALL
+        )
+        sys.exit(1)
