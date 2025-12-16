@@ -6,6 +6,7 @@ scan ports and verify presence of web services.
 
 import argparse
 import sys
+import concurrent.futures
 import ipaddress
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.console import Console
