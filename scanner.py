@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 """Scanner utilities for host discovery, MAC lookup and simple port scanning."""
 
 import ipaddress
