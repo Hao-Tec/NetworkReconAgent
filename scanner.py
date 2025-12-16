@@ -175,6 +175,17 @@ class HostDiscovery:  # pylint: disable=too-few-public-methods
 class MacScanner:  # pylint: disable=too-few-public-methods
     """Queries ARP cache to retrieve MAC addresses and vendor information."""
 
+    # Simple hardcoded lookup for example purposes
+    # In a real tool, this would be a large database
+    VENDORS = {
+        "B8:27:EB": "Raspberry Pi",
+        "DC:A6:32": "Raspberry Pi",
+        "98:BA:5F": "TP-Link",  # From user's log
+        "00:50:56": "VMware",
+        "00:0C:29": "VMware",
+        "00:15:5D": "Hyper-V",
+    }
+
     def __init__(self):
         self.arp_cache = {}
         self._refresh_arp()
@@ -217,18 +228,7 @@ class MacScanner:  # pylint: disable=too-few-public-methods
         # Basic OUI lookup (Top common vendors)
         vendor = ""
 
-        # Simple hardcoded lookup for example purposes
-        # In a real tool, this would be a large database
-        vendors = {
-            "B8:27:EB": "Raspberry Pi",
-            "DC:A6:32": "Raspberry Pi",
-            "98:BA:5F": "TP-Link",  # From user's log
-            "00:50:56": "VMware",
-            "00:0C:29": "VMware",
-            "00:15:5D": "Hyper-V",
-        }
-
-        for prefix, name in vendors.items():
+        for prefix, name in self.VENDORS.items():
             if mac.startswith(prefix):
                 vendor = f" ({name})"
                 break
@@ -241,6 +241,14 @@ class PortScanner:  # pylint: disable=too-few-public-methods
 
     def __init__(self, ports: List[int]):
         self.ports = ports
+        # Optimization: Reuse thread pool to avoid overhead of creating/destroying
+        # threads for every host.
+        # Cap global workers to 200 to match previous theoretical max (10 hosts * 20 ports)
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=200)
+
+    def shutdown(self):
+        """Shuts down the internal thread pool."""
+        self.executor.shutdown(wait=True)
 
     def _check_port(self, ip: str, port: int) -> int:
         """
@@ -263,21 +271,29 @@ class PortScanner:  # pylint: disable=too-few-public-methods
         Scans a single host for the defined list of ports.
         """
         open_ports = []
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=min(len(self.ports), 20)
-        ) as executor:
-            future_to_port = {
-                executor.submit(self._check_port, ip, port): port for port in self.ports
-            }
-            for future in concurrent.futures.as_completed(future_to_port):
-                result = future.result()
-                if result != 0:
-                    open_ports.append(result)
+        # Use shared executor
+        future_to_port = {
+            self.executor.submit(self._check_port, ip, port): port for port in self.ports
+        }
+        for future in concurrent.futures.as_completed(future_to_port):
+            result = future.result()
+            if result != 0:
+                open_ports.append(result)
         return sorted(open_ports)
 
 
 class ServiceVerifier:  # pylint: disable=too-few-public-methods
     """Verifies HTTP/HTTPS services and identifies running technologies."""
+
+    # 1. Technology Signatures (Keyword match)
+    TECHNOLOGIES = {
+        "Moodle": ["moodle", "pluginfile.php"],
+        "WordPress": ["wordpress", "wp-content"],
+        "Joomla": ["joomla"],
+        "Drupal": ["drupal"],
+        "Canvas": ["canvas", "instructure"],
+        "Blackboard": ["blackboard"],
+    }
 
     def __init__(self, check_path: str = "/"):
         self.check_path = check_path
@@ -413,17 +429,7 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
         lower_text = text.lower()
         headers = response.headers
 
-        # 1. Technology Signatures (Keyword match)
-        technologies = {
-            "Moodle": ["moodle", "pluginfile.php"],
-            "WordPress": ["wordpress", "wp-content"],
-            "Joomla": ["joomla"],
-            "Drupal": ["drupal"],
-            "Canvas": ["canvas", "instructure"],
-            "Blackboard": ["blackboard"],
-        }
-
-        for tech, keywords in technologies.items():
+        for tech, keywords in self.TECHNOLOGIES.items():
             if any(k in lower_text for k in keywords):
                 # Try to find version using regex
                 param_str = ""
