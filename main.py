@@ -6,7 +6,7 @@ scan ports and verify presence of web services.
 
 import argparse
 import sys
-import concurrent.futures
+import ipaddress
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.console import Console
 from rich.table import Table
@@ -168,10 +168,27 @@ def main() -> (
 
     # Delegate main work to helper objects below
     discoverer = HostDiscovery(target_subnet)
-    with console.status(
-        f"[bold cyan]Discovering hosts in {target_subnet}...", spinner="dots"
-    ):
-        live_hosts = discoverer.scan()
+
+    # Calculate total hosts for progress bar
+    try:
+        network = ipaddress.ip_network(target_subnet, strict=False)
+        total_hosts = sum(1 for _ in network.hosts())
+    except ValueError:
+        total_hosts = 100 # Fallback estimate
+
+    with Progress(
+        SpinnerColumn(style="bold cyan"),
+        TextColumn("[bold cyan]{task.description}"),
+        BarColumn(bar_width=None, style="cyan dim", complete_style="bold cyan"),
+        TextColumn("[bold cyan]{task.percentage:>3.0f}%"),
+        transient=True,
+    ) as progress:
+        task = progress.add_task(f"Discovering hosts in {target_subnet}...", total=total_hosts)
+
+        def advance_progress():
+            progress.advance(task)
+
+        live_hosts = discoverer.scan(progress_callback=advance_progress)
 
     if not live_hosts:
         print(
