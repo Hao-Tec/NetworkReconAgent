@@ -131,7 +131,7 @@ class HostDiscovery:  # pylint: disable=too-few-public-methods
         except OSError:
             return False
 
-    def scan(self, max_workers: int = 50) -> List[str]:
+    def scan(self, max_workers: int = 50, progress_callback=None) -> List[str]:
         """
         Scans the subnet for live hosts. Uses ARP if capable, otherwise Ping.
         """
@@ -161,6 +161,9 @@ class HostDiscovery:  # pylint: disable=too-few-public-methods
                     if future.result():
                         # print(f"[+] Host found: {ip}")
                         live_hosts.append(ip)
+
+                    if progress_callback:
+                        progress_callback()
 
         except ValueError as e:
             print(f"[!] Invalid subnet: {e}")
