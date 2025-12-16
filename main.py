@@ -189,7 +189,12 @@ def main() -> (
         def advance_progress():
             progress.advance(task)
 
-        live_hosts = discoverer.scan(progress_callback=advance_progress)
+        def log_message(msg):
+            progress.console.print(msg)
+
+        live_hosts = discoverer.scan(
+            progress_callback=advance_progress, message_callback=log_message
+        )
 
     if not live_hosts:
         print(
