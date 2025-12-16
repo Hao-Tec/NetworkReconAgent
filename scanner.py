@@ -185,7 +185,8 @@ class MacScanner:  # pylint: disable=too-few-public-methods
         """
         try:
             # Run arp -a
-            output = subprocess.check_output("arp -a", shell=True).decode(
+            # Security fix: use list args instead of shell=True to avoid injection risks
+            output = subprocess.check_output(["arp", "-a"]).decode(
                 "utf-8", errors="ignore"
             )
 

@@ -11,6 +11,7 @@ import ipaddress
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.console import Console
 from rich.table import Table
+from rich.markup import escape
 from colorama import init, Fore, Style
 
 from scanner import (
@@ -95,12 +96,12 @@ def process_host(  # pylint: disable=too-many-arguments,too-many-positional-argu
 
         if status_type in ("FOUND", "FOUND_MATCH"):
             progress.console.print(
-                f"[bold green][SUCCESS] Found SERVICE at {url} "
+                f"[bold green][SUCCESS] Found SERVICE at {escape(url)} "
                 f"(Status: {status_code})[/bold green]"
             )
             if fingerprint:
                 progress.console.print(
-                    f"[magenta]          Detected: {fingerprint}[/magenta]"
+                    f"[magenta]          Detected: {escape(fingerprint)}[/magenta]"
                 )
             local_found.append((ip, url, status_code, fingerprint))
         elif status_type == "ROOT_ONLY":
