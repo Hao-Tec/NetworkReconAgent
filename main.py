@@ -175,7 +175,7 @@ def main() -> (
         network = ipaddress.ip_network(target_subnet, strict=False)
         total_hosts = sum(1 for _ in network.hosts())
     except ValueError:
-        total_hosts = 100 # Fallback estimate
+        total_hosts = 100  # Fallback estimate
 
     with Progress(
         SpinnerColumn(style="bold cyan"),
@@ -184,7 +184,9 @@ def main() -> (
         TextColumn("[bold cyan]{task.percentage:>3.0f}%"),
         transient=True,
     ) as progress:
-        task = progress.add_task(f"Discovering hosts in {target_subnet}...", total=total_hosts)
+        task = progress.add_task(
+            f"Discovering hosts in {target_subnet}...", total=total_hosts
+        )
 
         def advance_progress():
             progress.advance(task)
@@ -229,108 +231,116 @@ def main() -> (
     scanner = PortScanner(target_ports)
     verifier = ServiceVerifier(args.path)
 
-    found_services = []
-    partial_matches = []
+    try:
+        found_services = []
+        partial_matches = []
 
-    # Prepare list of common paths to try
-    # Prepare list of common paths to try
-    common_paths = [args.path]
+        # Prepare list of common paths to try
+        # Prepare list of common paths to try
+        common_paths = [args.path]
 
-    # Expanded list for deep enumeration
-    defaults = [
-        "/",
-        "/moodle/",
-        "/moodle/login/",
-        "/moodle/admin/",
-        "/login/",
-        "/admin/",
-        "/wp-login.php",
-        "/dashboard/",
-        "/canvas/",
-        "/blackboard/",
-    ]
+        # Expanded list for deep enumeration
+        defaults = [
+            "/",
+            "/moodle/",
+            "/moodle/login/",
+            "/moodle/admin/",
+            "/login/",
+            "/admin/",
+            "/wp-login.php",
+            "/dashboard/",
+            "/canvas/",
+            "/blackboard/",
+        ]
 
-    for p in defaults:
-        if p not in common_paths and args.path.rstrip("/") != p.rstrip("/"):
-            common_paths.append(p)
+        for p in defaults:
+            if p not in common_paths and args.path.rstrip("/") != p.rstrip("/"):
+                common_paths.append(p)
 
-    with Progress(
-        SpinnerColumn(style="bold cyan"),
-        TextColumn("[bold blue]{task.description}"),
-        BarColumn(bar_width=None, style="blue dim", complete_style="bold blue"),
-        TextColumn("[bold blue]{task.percentage:>3.0f}%"),
-        transient=False,
-    ) as progress:
+        with Progress(
+            SpinnerColumn(style="bold cyan"),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=None, style="blue dim", complete_style="bold blue"),
+            TextColumn("[bold blue]{task.percentage:>3.0f}%"),
+            transient=False,
+        ) as progress:
 
-        scan_task = progress.add_task(
-            "[bold cyan]Scanning hosts...", total=len(live_hosts)
-        )
+            scan_task = progress.add_task(
+                "[bold cyan]Scanning hosts...", total=len(live_hosts)
+            )
 
-        # Parallel processing of hosts
-        # Cap workers at 10 to avoid overwhelming network/resources
-        max_workers = min(len(live_hosts), 10) or 1
+            # Parallel processing of hosts
+            # Cap workers at 10 to avoid overwhelming network/resources
+            max_workers = min(len(live_hosts), 10) or 1
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_ip = {
-                executor.submit(
-                    process_host,
-                    ip,
-                    scanner,
-                    verifier,
-                    common_paths,
-                    progress,
-                    scan_task,
-                ): ip
-                for ip in live_hosts
-            }
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=max_workers
+            ) as executor:
+                future_to_ip = {
+                    executor.submit(
+                        process_host,
+                        ip,
+                        scanner,
+                        verifier,
+                        common_paths,
+                        progress,
+                        scan_task,
+                    ): ip
+                    for ip in live_hosts
+                }
 
-            for future in concurrent.futures.as_completed(future_to_ip):
-                try:
-                    found, partial = future.result()
-                    found_services.extend(found)
-                    partial_matches.extend(partial)
-                except Exception as exc:  # pylint: disable=broad-exception-caught
-                    if args.debug:
-                        print(f"Generated an exception: {exc}")
+                for future in concurrent.futures.as_completed(future_to_ip):
+                    try:
+                        found, partial = future.result()
+                        found_services.extend(found)
+                        partial_matches.extend(partial)
+                    except Exception as exc:  # pylint: disable=broad-exception-caught
+                        if args.debug:
+                            print(f"Generated an exception: {exc}")
 
-    print(Fore.YELLOW + "\n[3] Reconnaissance Complete." + Style.RESET_ALL)
+        print(Fore.YELLOW + "\n[3] Reconnaissance Complete." + Style.RESET_ALL)
 
-    if found_services:
-        table = Table(
-            title=f"SUMMARY: Found {len(found_services)} TARGET MATCHES",
-            border_style="green",
-        )
-        table.add_column("URL", style="cyan")
-        table.add_column("Status", style="green")
-        table.add_column("Technology", style="magenta")
+        if found_services:
+            table = Table(
+                title=f"SUMMARY: Found {len(found_services)} TARGET MATCHES",
+                border_style="green",
+            )
+            table.add_column("URL", style="cyan")
+            table.add_column("Status", style="green")
+            table.add_column("Technology", style="magenta")
 
-        for ip, url, status, fp in found_services:
-            table.add_row(url, str(status), fp)
+            for ip, url, status, fp in found_services:
+                table.add_row(url, str(status), fp)
 
-        console.print(table)
+            console.print(table)
 
-    if partial_matches and not found_services:
-        table = Table(
-            title=f"No exact matches for '{args.path}', but found WEB SERVERS",
-            border_style="cyan",
-        )
-        table.add_column("URL", style="cyan")
-        table.add_column("Status", style="green")
-        table.add_column("Technology", style="magenta")
+        if partial_matches and not found_services:
+            table = Table(
+                title=f"No exact matches for '{args.path}', but found WEB SERVERS",
+                border_style="cyan",
+            )
+            table.add_column("URL", style="cyan")
+            table.add_column("Status", style="green")
+            table.add_column("Technology", style="magenta")
 
-        for ip, url, status, fp in partial_matches:
-            table.add_row(url, str(status), f"{fp} (Root path works)")
+            for ip, url, status, fp in partial_matches:
+                table.add_row(url, str(status), f"{fp} (Root path works)")
 
-        console.print(table)
+            console.print(table)
 
-    if not found_services and not partial_matches:
-        print(
-            Fore.RED
-            + f"\nNo web services found matching path '{args.path}'."
-            + Style.RESET_ALL
-        )
-        print("However, the following hosts are alive: " + ", ".join(live_hosts))
-        print("Tip: Try scanning all ports with nmap if you still can't find it.")
+        if not found_services and not partial_matches:
+            print(
+                Fore.RED
+                + f"\nNo web services found matching path '{args.path}'."
+                + Style.RESET_ALL
+            )
+            print("However, the following hosts are alive: " + ", ".join(live_hosts))
+            print(
+                "Tip: Try scanning all ports with nmap if you still can't find it."
+            )
+    finally:
+        # Ensure thread pool is shut down properly
+        scanner.shutdown()
 
 
 if __name__ == "__main__":
