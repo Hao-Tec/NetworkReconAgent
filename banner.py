@@ -5,6 +5,7 @@ Module for displaying the startup banner.
 
 import time
 import random
+from collections import deque
 from rich.console import Console
 from rich.text import Text
 from rich.panel import Panel
@@ -31,7 +32,7 @@ def matrix_rain(duration=3.0):
     # Rain simulation using Rich Layout and Live display
     # This prevents the "scrolling" effect by using a full-screen TUI update
     layout = Layout()
-    lines = []
+    lines = deque(maxlen=console.height)
 
     try:
         with Live(
@@ -57,10 +58,6 @@ def matrix_rain(duration=3.0):
                         styled_line.append(" ")
 
                 lines.append(styled_line)
-
-                # Keep lines within screen height to prevent scrolling issues within the layout
-                if len(lines) > console.height:
-                    lines = lines[-console.height :]
 
                 layout.update(Text("\n").join(lines))
                 time.sleep(0.04)
