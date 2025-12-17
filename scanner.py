@@ -70,16 +70,22 @@ class ArpScanner:  # pylint: disable=too-few-public-methods
     def __init__(self, subnet: str):
         self.subnet = subnet
 
-    def scan(self) -> List[str]:
+    def scan(self, message_callback=None) -> List[str]:
         """
         Sends ARP broadcast to subnet and returns list of live IPs.
         """
+        def log(msg):
+            if message_callback:
+                message_callback(msg)
+            else:
+                print(msg)
+
         if not HAS_SCAPY:
-            print("[!] Scapy not found or failed to import. Falling back...")
+            log("[!] Scapy not found or failed to import. Falling back...")
             return []
 
         try:
-            print(f"[*] ARP Scanning {self.subnet}...")
+            log(f"[*] ARP Scanning {self.subnet}...")
             # Create ARP request packet
             arp = ARP(pdst=self.subnet)
             ether = Ether(dst="ff:ff:ff:ff:ff:ff")
@@ -97,7 +103,7 @@ class ArpScanner:  # pylint: disable=too-few-public-methods
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             # Scapy might fail if no Npcap/privileges
-            print(f"[!] ARP scan failed: {e}. Falling back to Ping.")
+            log(f"[!] ARP scan failed: {e}. Falling back to Ping.")
             return []
 
 
@@ -132,15 +138,24 @@ class HostDiscovery:  # pylint: disable=too-few-public-methods
         except OSError:
             return False
 
-    def scan(self, max_workers: int = 50, progress_callback=None) -> List[str]:
+    def scan(
+        self, max_workers: int = 50, progress_callback=None, message_callback=None
+    ) -> List[str]:
         """
         Scans the subnet for live hosts. Uses ARP if capable, otherwise Ping.
         """
+
+        def log(msg):
+            if message_callback:
+                message_callback(msg)
+            else:
+                print(msg)
+
         # Try ARP first if Scapy is available
         if HAS_SCAPY:
             # Check if subnet is manageable size for ARP (usually always is true for local)
             arp_scanner = ArpScanner(self.subnet)
-            hosts = arp_scanner.scan()
+            hosts = arp_scanner.scan(message_callback=message_callback)
             if hosts:
                 return hosts
             # If ARP returned nothing, might be failure or remote network, fall through to Ping
@@ -151,7 +166,7 @@ class HostDiscovery:  # pylint: disable=too-few-public-methods
             network = ipaddress.ip_network(self.subnet, strict=False)
             hosts = [str(ip) for ip in network.hosts()]
 
-            print(f"[*] Ping Scanning {self.subnet} ({len(hosts)} IPs)...")
+            log(f"[*] Ping Scanning {self.subnet} ({len(hosts)} IPs)...")
 
             with concurrent.futures.ThreadPoolExecutor(
                 max_workers=max_workers
@@ -167,7 +182,7 @@ class HostDiscovery:  # pylint: disable=too-few-public-methods
                         progress_callback()
 
         except ValueError as e:
-            print(f"[!] Invalid subnet: {e}")
+            log(f"[!] Invalid subnet: {e}")
 
         return sorted(live_hosts)
 
