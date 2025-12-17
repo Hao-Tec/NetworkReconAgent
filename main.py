@@ -173,7 +173,11 @@ def main() -> (
     # Calculate total hosts for progress bar
     try:
         network = ipaddress.ip_network(target_subnet, strict=False)
-        total_hosts = sum(1 for _ in network.hosts())
+        # Optimization: O(1) calculation instead of O(N) iteration
+        if network.prefixlen >= 31:
+            total_hosts = network.num_addresses
+        else:
+            total_hosts = network.num_addresses - 2
     except ValueError:
         total_hosts = 100  # Fallback estimate
 
