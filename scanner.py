@@ -218,15 +218,16 @@ class MacScanner:  # pylint: disable=too-few-public-methods
         Parses 'arp -a' output to build an IP -> MAC mapping.
         """
         try:
-            # Run arp -a
-            output = subprocess.check_output("arp -a", shell=True).decode(
+            # Run arp -a safely without shell=True
+            output = subprocess.check_output(["arp", "-a"]).decode(
                 "utf-8", errors="ignore"
             )
 
-            # Regex to find IP and MAC: matches "192.168.x.x ... aa-bb-cc-dd-ee-ff"
-            # Windows output format: Use robust regex
+            # Regex to find IP and MAC. Supports:
+            # Windows: 192.168.1.1 ... 00-11-22-33-44-55
+            # Linux: ? (192.168.0.1) at 42:40:74:54:23:2f ...
             pattern = re.compile(
-                r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+([0-9a-fA-F:-]{17})\s+"
+                r"[?(]?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})[)]?\s+(?:at\s+)?([0-9a-fA-F:-]{17})"
             )
 
             for line in output.splitlines():
