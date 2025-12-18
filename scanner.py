@@ -164,14 +164,22 @@ class HostDiscovery:  # pylint: disable=too-few-public-methods
         live_hosts = []
         try:
             network = ipaddress.ip_network(self.subnet, strict=False)
-            hosts = [str(ip) for ip in network.hosts()]
+            # Optimization: Calculate count without iterating (O(1))
+            if network.prefixlen >= 31:
+                host_count = network.num_addresses
+            else:
+                host_count = network.num_addresses - 2
 
-            log(f"[*] Ping Scanning {self.subnet} ({len(hosts)} IPs)...")
+            log(f"[*] Ping Scanning {self.subnet} ({host_count} IPs)...")
 
             with concurrent.futures.ThreadPoolExecutor(
                 max_workers=max_workers
             ) as executor:
-                future_to_ip = {executor.submit(self._ping, ip): ip for ip in hosts}
+                # Optimization: Generator expression avoids creating intermediate list of all IPs
+                future_to_ip = {
+                    executor.submit(self._ping, str(ip)): str(ip)
+                    for ip in network.hosts()
+                }
                 for future in concurrent.futures.as_completed(future_to_ip):
                     ip = future_to_ip[future]
                     if future.result():
