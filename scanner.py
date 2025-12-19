@@ -19,7 +19,7 @@ except ImportError:
     psutil = None
 
 try:
-    from scapy.all import ARP, Ether, srp
+    import scapy  # pylint: disable=unused-import
 
     HAS_SCAPY = True
 except ImportError:
@@ -85,6 +85,9 @@ class ArpScanner:  # pylint: disable=too-few-public-methods
             return []
 
         try:
+            # Lazy import to speed up startup time
+            from scapy.all import ARP, Ether, srp
+
             log(f"[*] ARP Scanning {self.subnet}...")
             # Create ARP request packet
             arp = ARP(pdst=self.subnet)
@@ -101,6 +104,9 @@ class ArpScanner:  # pylint: disable=too-few-public-methods
 
             return sorted(live_hosts)
 
+        except ImportError:
+            log("[!] Scapy modules failed to import. Falling back to Ping.")
+            return []
         except Exception as e:  # pylint: disable=broad-exception-caught
             # Scapy might fail if no Npcap/privileges
             log(f"[!] ARP scan failed: {e}. Falling back to Ping.")
