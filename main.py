@@ -216,9 +216,17 @@ def main() -> (
 
     # Initialize MAC Scanner and show basic info
     mac_scanner = MacScanner()
+
+    # Create a table for better readability of results
+    host_table = Table(show_header=True, header_style="bold magenta")
+    host_table.add_column("IP Address", style="green")
+    host_table.add_column("MAC Address / Vendor", style="cyan")
+
     for host in live_hosts:
         mac_info = mac_scanner.get_mac_info(host)
-        print(f"    - {host} {Fore.CYAN}{mac_info}{Style.RESET_ALL}")
+        host_table.add_row(host, mac_info or "-")
+
+    console.print(host_table)
 
     # 2. Port Scanning & Service Verification
     ports_display = str(target_ports)
