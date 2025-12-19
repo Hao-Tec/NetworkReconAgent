@@ -175,19 +175,48 @@ class HostDiscovery:  # pylint: disable=too-few-public-methods
             with concurrent.futures.ThreadPoolExecutor(
                 max_workers=max_workers
             ) as executor:
-                # Optimization: Generator expression avoids creating intermediate list of all IPs
-                future_to_ip = {
-                    executor.submit(self._ping, str(ip)): str(ip)
-                    for ip in network.hosts()
-                }
-                for future in concurrent.futures.as_completed(future_to_ip):
-                    ip = future_to_ip[future]
-                    if future.result():
-                        # print(f"[+] Host found: {ip}")
-                        live_hosts.append(ip)
+                # Iterator for hosts
+                hosts_iter = network.hosts()
+                # Keep track of active futures: {future: ip_str}
+                active_futures = {}
 
-                    if progress_callback:
-                        progress_callback()
+                # Helper to submit next batch of tasks
+                def submit_tasks():
+                    # Keep queue full up to 2x workers to ensure CPU saturation
+                    while len(active_futures) < max_workers * 2:
+                        try:
+                            ip = next(hosts_iter)
+                            ip_str = str(ip)
+                            fut = executor.submit(self._ping, ip_str)
+                            active_futures[fut] = ip_str
+                        except StopIteration:
+                            return False  # No more hosts
+                    return True  # More hosts might be available
+
+                # Initial submission
+                submit_tasks()
+
+                while active_futures:
+                    # Wait for at least one future to complete
+                    done, _ = concurrent.futures.wait(
+                        active_futures.keys(),
+                        return_when=concurrent.futures.FIRST_COMPLETED,
+                    )
+
+                    for future in done:
+                        ip = active_futures.pop(future)
+                        try:
+                            if future.result():
+                                # print(f"[+] Host found: {ip}")
+                                live_hosts.append(ip)
+                        except Exception:  # pylint: disable=broad-exception-caught
+                            pass  # Ignore errors from ping
+
+                        if progress_callback:
+                            progress_callback()
+
+                    # Replenish queue
+                    submit_tasks()
 
         except ValueError as e:
             log(f"[!] Invalid subnet: {e}")
