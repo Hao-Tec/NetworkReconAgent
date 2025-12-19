@@ -1,0 +1,2 @@
+[tool:pylint]
+disable = R0914,R0801,duplicate-code

@@ -140,7 +140,7 @@ class HostDiscovery:  # pylint: disable=too-few-public-methods
 
     def scan(
         self, max_workers: int = 50, progress_callback=None, message_callback=None
-    ) -> List[str]:
+    ) -> List[str]:  # pylint: disable=too-many-locals
         """
         Scans the subnet for live hosts. Uses ARP if capable, otherwise Ping.
         """
