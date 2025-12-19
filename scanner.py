@@ -176,7 +176,8 @@ class HostDiscovery:  # pylint: disable=too-few-public-methods
                 max_workers=max_workers
             ) as executor:
                 # Iterator for hosts
-                hosts_iter = network.hosts()
+                # Fix: Wrap in iter() because for /32 networks, .hosts() returns a list
+                hosts_iter = iter(network.hosts())
                 # Keep track of active futures: {future: ip_str}
                 active_futures = {}
 

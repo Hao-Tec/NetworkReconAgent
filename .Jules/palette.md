@@ -1,5 +1,7 @@
-## 2024-05-23 - Improved Live Hosts Display
+## 2024-05-23 - [Handling ipaddress.hosts() Return Types]
+**Learning:** Python's `ipaddress.ip_network().hosts()` returns a `list` for /32 (single host) networks but a `generator` for others. This inconsistency causes `TypeError: 'list' object is not an iterator` if you use `next()` directly without wrapping it in `iter()`.
+**Action:** Always wrap `network.hosts()` in `iter()` when using manual iteration (like `next()`) to ensure consistent behavior across all subnet sizes.
 
-**Learning:** When displaying potentially large lists of data in a CLI (like network scan results), a simple text list becomes unreadable. Users lose context of what the data represents (e.g., is that IP or MAC?).
-
-**Action:** Use structured tables (like `rich.Table`) for lists > 5 items. This provides visual boundaries, headers for context, and better alignment, making the data scannable and "professional" feeling. Even for small lists, tables add a polished look that users appreciate.
+## 2024-05-23 - [Visualizing Large Host Lists]
+**Learning:** Displaying a long list of IP addresses (>10) as a raw comma-separated string or a single-column table creates a "wall of text" that is hard to scan.
+**Action:** Use `rich.columns.Columns` with `Panel` elements to create a responsive grid layout. This compresses the vertical space required and makes the output much more scannable and visually appealing.

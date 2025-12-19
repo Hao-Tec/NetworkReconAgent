@@ -11,6 +11,8 @@ import ipaddress
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.console import Console
 from rich.table import Table
+from rich.panel import Panel
+from rich.columns import Columns
 from colorama import init, Fore, Style
 
 from scanner import (
@@ -23,6 +25,17 @@ from scanner import (
 from banner import print_banner
 
 console = Console()
+
+
+def print_error(title: str, message: str):
+    """Prints a styled error message using Rich Panel."""
+    console.print(
+        Panel(
+            f"[bold red]{message}[/bold red]",
+            title=f"[bold red]❌ {title}[/bold red]",
+            border_style="red",
+        )
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -147,25 +160,21 @@ def main() -> (
             target_ports = sorted(list(set(target_ports)))
 
         except ValueError:
-            print(
-                Fore.RED
-                + "[!] Error: Invalid port format. Please use comma-separated "
-                + "numbers or ranges (e.g. 80-90)."
-                + Style.RESET_ALL
+            print_error(
+                "Invalid Port Format",
+                "Please use comma-separated numbers or ranges (e.g. 80-90).",
             )
             sys.exit(1)
 
     # Auto-detect subnet if not provided
     target_subnet = args.subnet or None
     if not target_subnet:
-        print(
-            Fore.YELLOW
-            + "[*] No subnet specified. Auto-detecting local network..."
-            + Style.RESET_ALL,
+        console.print(
+            "[yellow][*] No subnet specified. Auto-detecting local network...[/yellow]",
             end="",
         )
         target_subnet = get_local_network()
-        print(Fore.CYAN + str(target_subnet) + Style.RESET_ALL)
+        console.print(f"[cyan]{target_subnet}[/cyan]")
 
     # Delegate main work to helper objects below
     discoverer = HostDiscovery(target_subnet)
@@ -203,16 +212,15 @@ def main() -> (
         )
 
     if not live_hosts:
-        print(
-            Fore.RED
-            + "[-]"
-            + f" No live hosts found in {target_subnet}."
-            + " Check your network connection or subnet."
-            + Style.RESET_ALL
+        print_error(
+            "No Hosts Found",
+            f"No live hosts found in {target_subnet}.\nCheck your network connection or subnet.",
         )
         sys.exit(0)
 
-    print(Fore.GREEN + f"[+] Found {len(live_hosts)} live hosts." + Style.RESET_ALL)
+    console.print(
+        f"[bold green][+] Found {len(live_hosts)} live hosts.[/bold green]"
+    )
 
     # Initialize MAC Scanner and show basic info
     mac_scanner = MacScanner()
@@ -341,14 +349,33 @@ def main() -> (
             console.print(table)
 
         if not found_services and not partial_matches:
-            print(
-                Fore.RED
-                + f"\nNo web services found matching path '{args.path}'."
-                + Style.RESET_ALL
+            console.print(
+                f"\n[bold red]No web services found matching path '{args.path}'.[/bold red]"
             )
-            print("However, the following hosts are alive: " + ", ".join(live_hosts))
-            print(
-                "Tip: Try scanning all ports with nmap if you still can't find it."
+
+            # Improved display of live hosts
+            if len(live_hosts) > 10:
+                # Use Columns for many hosts to save space
+                host_panels = [
+                    Panel(ip, expand=True, border_style="cyan") for ip in live_hosts
+                ]
+                console.print(
+                    Panel(
+                        Columns(host_panels, equal=True, expand=False),
+                        title=f"[bold green]Live Hosts ({len(live_hosts)})[/bold green]",
+                        border_style="green",
+                    )
+                )
+            else:
+                # Simple list for few hosts
+                console.print(
+                    f"However, the following {len(live_hosts)} hosts are alive:"
+                )
+                for ip in live_hosts:
+                    console.print(f"  - [cyan]{ip}[/cyan]")
+
+            console.print(
+                "\n[dim]Tip: Try scanning all ports with nmap if you still can't find it.[/dim]"
             )
     finally:
         # Ensure thread pool is shut down properly
@@ -359,24 +386,20 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print(Fore.RED + "\n[!] Interrupted by user." + Style.RESET_ALL)
+        console.print("\n[bold red][!] Interrupted by user.[/bold red]")
         sys.exit(0)
     except PermissionError:
-        print(
-            Fore.RED
-            + "\n[!] PERMISSION ERROR: Access Denied."
-            + "\n    This tool requires Administrator privileges for network scanning."
-            + "\n    Please restart your terminal as Administrator."
-            + Style.RESET_ALL
+        print_error(
+            "Access Denied",
+            "This tool requires Administrator privileges for network scanning.\n"
+            "Please restart your terminal as Administrator.",
         )
         sys.exit(1)
     except Exception as e:  # pylint: disable=broad-exception-caught
         if "--debug" in sys.argv:
             raise
-        print(
-            Fore.RED
-            + f"\n[!] Unexpected Error: {e}"
-            + "\n    Use --debug to see full traceback."
-            + Style.RESET_ALL
+        print_error(
+            "Unexpected Error",
+            f"{e}\nUse --debug to see full traceback.",
         )
         sys.exit(1)
