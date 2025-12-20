@@ -36,6 +36,16 @@ def _save_json(data: Dict[str, Any], filename: str) -> None:
         print(f"[!] Error saving JSON report: {e}")
 
 
+def _sanitize_csv_cell(value: Any) -> Any:
+    """
+    Sanitizes a value to prevent CSV injection (Formula Injection).
+    Prepends a single quote if the value starts with =, +, -, or @.
+    """
+    if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
+        return "'" + value
+    return value
+
+
 def _save_csv(data: Dict[str, Any], filename: str) -> None:
     """Saves flat data as CSV. Flattens the hierarchical structure."""
     try:
@@ -52,19 +62,19 @@ def _save_csv(data: Dict[str, Any], filename: str) -> None:
             if services:
                 for svc in services:
                     flat_rows.append({
-                        "ip": ip,
-                        "mac": mac,
+                        "ip": _sanitize_csv_cell(ip),
+                        "mac": _sanitize_csv_cell(mac),
                         "port": svc.get("port"),
-                        "url": svc.get("url"),
+                        "url": _sanitize_csv_cell(svc.get("url")),
                         "status": svc.get("status"),
-                        "fingerprint": svc.get("fingerprint"),
+                        "fingerprint": _sanitize_csv_cell(svc.get("fingerprint")),
                         "type": "Web Service"
                     })
             else:
                 # Just the host info
                 flat_rows.append({
-                    "ip": ip,
-                    "mac": mac,
+                    "ip": _sanitize_csv_cell(ip),
+                    "mac": _sanitize_csv_cell(mac),
                     "port": "",
                     "url": "",
                     "status": "",
