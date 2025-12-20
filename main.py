@@ -20,6 +20,7 @@ from scanner import (
     PortScanner,
     ServiceVerifier,
     AsyncServiceVerifier,
+    BannerGrabber,
     get_local_network,
     MacScanner,
     HAS_AIOHTTP,
@@ -142,6 +143,15 @@ def process_host(  # pylint: disable=too-many-arguments,too-many-positional-argu
             local_found.append((ip, port, url, status_code, fingerprint))
         elif status_type == "ROOT_ONLY":
             local_partial.append((ip, port, url, status_code, fingerprint))
+        elif status_type == "NOT_FOUND":
+            # HTTP didn't work, try banner grabbing for other protocols
+            banner = BannerGrabber.identify_service(ip, port)
+            if banner and "Unknown service" not in banner:
+                progress.console.print(
+                    f"[bold cyan][INFO] Found {banner} at {ip}:{port}[/bold cyan]"
+                )
+                # Add to partial matches with banner info
+                local_partial.append((ip, port, f"{ip}:{port}", 0, banner))
 
     progress.advance(scan_task)
     return local_found, local_partial
@@ -190,6 +200,17 @@ async def async_process_host(  # pylint: disable=too-many-arguments,R0917,too-ma
                 local_found.append((ip, port, url, status_code, fingerprint))
             elif status_type == "ROOT_ONLY":
                 local_partial.append((ip, port, url, status_code, fingerprint))
+            elif status_type == "NOT_FOUND":
+                # HTTP didn't work, try banner grabbing (run in executor since it's sync)
+                loop = asyncio.get_event_loop()
+                banner = await loop.run_in_executor(
+                    None, BannerGrabber.identify_service, ip, port
+                )
+                if banner and "Unknown service" not in banner:
+                    progress.console.print(
+                        f"[bold cyan][INFO] Found {banner} at {ip}:{port}[/bold cyan]"
+                    )
+                    local_partial.append((ip, port, f"{ip}:{port}", 0, banner))
 
         progress.advance(scan_task)
         return local_found, local_partial

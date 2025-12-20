@@ -607,3 +607,113 @@ class AsyncServiceVerifier:  # pylint: disable=too-few-public-methods
             hints.append(f"Title: {title}")
 
         return ", ".join(hints) if hints else "Generic Web Server"
+
+
+class BannerGrabber:  # pylint: disable=too-few-public-methods
+    """Grabs banners from various network services for fingerprinting."""
+
+    @staticmethod
+    def grab_banner(ip: str, port: int, timeout: float = 2.0) -> str:  # pylint: disable=too-many-return-statements,too-many-branches
+        """
+        Attempts to grab a banner from a service by connecting and reading initial response.
+        Returns the banner string or empty string if failed.
+        """
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(timeout)
+                sock.connect((ip, port))
+
+                # Send protocol-specific probes
+                if port == 22:  # SSH
+                    # SSH servers send banner immediately
+                    banner = sock.recv(1024).decode('utf-8', errors='ignore').strip()
+                    return f"SSH: {banner}"
+
+                if port == 21:  # FTP
+                    banner = sock.recv(1024).decode('utf-8', errors='ignore').strip()
+                    return f"FTP: {banner}"
+
+                if port in (3306, 3307):  # MySQL/MariaDB
+                    # MySQL sends handshake immediately
+                    data = sock.recv(1024)
+                    try:
+                        # Parse MySQL protocol version (rough)
+                        if len(data) > 5 and data[4] in (9, 10):  # Protocol version
+                            version_end = data.find(b'\x00', 5)
+                            if version_end > 0:
+                                version = data[5:version_end].decode('utf-8', errors='ignore')
+                                return f"MySQL/MariaDB: {version}"
+                    except (ValueError, UnicodeDecodeError):
+                        pass
+                    return "MySQL/MariaDB (Detected)"
+
+                if port == 5432:  # PostgreSQL
+                    # PostgreSQL requires SSL negotiation first
+                    return "PostgreSQL (Detected)"
+
+                if port == 6379:  # Redis
+                    sock.sendall(b"INFO server\r\n")
+                    response = sock.recv(4096).decode('utf-8', errors='ignore')
+                    if "redis_version:" in response:
+                        for line in response.split('\n'):
+                            if line.startswith('redis_version:'):
+                                version = line.split(':')[1].strip()
+                                return f"Redis: {version}"
+                    return "Redis (Detected)"
+
+                if port == 27017:  # MongoDB
+                    return "MongoDB (Detected)"
+
+                if port == 1433:  # MSSQL
+                    return "Microsoft SQL Server (Detected)"
+
+                if port == 5672:  # RabbitMQ
+                    banner = sock.recv(1024).decode('utf-8', errors='ignore')
+                    if "AMQP" in banner:
+                        return f"RabbitMQ: {banner.strip()}"
+                    return "RabbitMQ (Detected)"
+
+                # Generic banner grab - just read what server sends
+                sock.sendall(b"\r\n")
+                banner = sock.recv(1024).decode('utf-8', errors='ignore').strip()
+                if banner:
+                    return banner[:100]  # Truncate long banners
+
+        except (socket.timeout, socket.error, OSError, UnicodeDecodeError):
+            pass
+
+        return ""
+
+    @staticmethod
+    def identify_service(ip: str, port: int) -> str:
+        """
+        Identifies a service on given IP:port.
+        Returns a descriptive string of the service.
+        """
+        banner = BannerGrabber.grab_banner(ip, port)
+
+        if banner:
+            return banner
+
+        # Fallback to port-based identification if no banner
+        common_ports = {
+            22: "SSH",
+            21: "FTP",
+            23: "Telnet",
+            25: "SMTP",
+            53: "DNS",
+            110: "POP3",
+            143: "IMAP",
+            389: "LDAP",
+            445: "SMB",
+            1433: "MSSQL",
+            3306: "MySQL",
+            3389: "RDP",
+            5432: "PostgreSQL",
+            5900: "VNC",
+            6379: "Redis",
+            8080: "HTTP-Proxy",
+            27017: "MongoDB",
+        }
+
+        return common_ports.get(port, f"Unknown service on port {port}")
