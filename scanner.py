@@ -8,10 +8,13 @@ import platform
 import concurrent.futures
 import re
 import uuid
+import functools
 from typing import List, Tuple
 
 import requests
 import urllib3
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 try:
     import psutil
@@ -27,6 +30,28 @@ except ImportError:
 
 # Suppress InsecureRequestWarning from urllib3/requests
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+@functools.lru_cache(maxsize=256)
+def _get_vendor_from_mac(mac_prefix: str) -> str:
+    """
+    Cached vendor lookup by MAC address prefix.
+    Returns vendor name or empty string.
+    """
+    vendors = {
+        "B8:27:EB": "Raspberry Pi",
+        "DC:A6:32": "Raspberry Pi",
+        "98:BA:5F": "TP-Link",
+        "00:50:56": "VMware",
+        "00:0C:29": "VMware",
+        "00:15:5D": "Hyper-V",
+        "5C:4D:BF": "Unknown",  # Can add more as discovered
+    }
+    for prefix, name in vendors.items():
+        if mac_prefix.startswith(prefix):
+            return f" ({name})"
+    return ""
+
 
 
 def get_local_network() -> str:
@@ -214,25 +239,8 @@ class MacScanner:  # pylint: disable=too-few-public-methods
         if not mac:
             return ""
 
-        # Basic OUI lookup (Top common vendors)
-        vendor = ""
-
-        # Simple hardcoded lookup for example purposes
-        # In a real tool, this would be a large database
-        vendors = {
-            "B8:27:EB": "Raspberry Pi",
-            "DC:A6:32": "Raspberry Pi",
-            "98:BA:5F": "TP-Link",  # From user's log
-            "00:50:56": "VMware",
-            "00:0C:29": "VMware",
-            "00:15:5D": "Hyper-V",
-        }
-
-        for prefix, name in vendors.items():
-            if mac.startswith(prefix):
-                vendor = f" ({name})"
-                break
-
+        # Use cached vendor lookup
+        vendor = _get_vendor_from_mac(mac)
         return f"[{mac}]{vendor}"
 
 
@@ -279,15 +287,33 @@ class PortScanner:  # pylint: disable=too-few-public-methods
 class ServiceVerifier:  # pylint: disable=too-few-public-methods
     """Verifies HTTP/HTTPS services and identifies running technologies."""
 
-    def __init__(self, check_path: str = "/"):
+    def __init__(self, check_path: str = "/", timeout: int = 3, retries: int = 3):
         self.check_path = check_path
+        self.timeout = timeout
         # Normalize path
         if not self.check_path.startswith("/"):
             self.check_path = "/" + self.check_path
 
-        # Initialize session for connection pooling
+        # Initialize session with connection pooling and retry logic
         self.session = requests.Session()
         self.session.verify = False
+
+        # Configure retry strategy
+        retry_strategy = Retry(
+            total=retries,
+            backoff_factor=0.5,  # 0.5s, 1s, 2s delays
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["HEAD", "GET", "OPTIONS"]
+        )
+
+        # Mount adapter with retry strategy and connection pooling
+        adapter = HTTPAdapter(
+            max_retries=retry_strategy,
+            pool_connections=50,  # Connection pool size
+            pool_maxsize=50
+        )
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
 
     def check_http(
         self, ip: str, port: int, check_paths: List[str] = None
@@ -311,7 +337,7 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
                 target_url = f"{base_url}{path}"
                 try:
                     response = self.session.get(
-                        target_url, timeout=3, allow_redirects=True, verify=False
+                        target_url, timeout=self.timeout, allow_redirects=True, verify=False
                     )
 
                     # Fingerprinting logic

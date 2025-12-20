@@ -8,6 +8,7 @@ import argparse
 import sys
 import concurrent.futures
 import ipaddress
+import logging
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.console import Console
 from rich.table import Table
@@ -65,6 +66,28 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         help="Path to save report (e.g. report.json or report.csv).",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=3,
+        help="HTTP request timeout in seconds (default: 3).",
+    )
+    parser.add_argument(
+        "--retries",
+        type=int,
+        default=3,
+        help="Number of retries for failed HTTP requests (default: 3).",
+    )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=20,
+        help="Maximum concurrent workers for scanning (default: 20).",
+    )
+    parser.add_argument(
+        "--log-file",
+        help="Path to save debug log file.",
     )
     return parser.parse_args()
 
@@ -128,6 +151,16 @@ def main() -> (
     init()
 
     args = parse_args()
+
+    # Setup logging if requested
+    if args.log_file:
+        logging.basicConfig(
+            filename=args.log_file,
+            level=logging.DEBUG,
+            format='%(asctime)s - %(levelname)s - %(message)s'
+        )
+        logging.info("Network Reconnaissance Agent started")
+        logging.info("Arguments: %s", args)
 
     # Move banner here so debug args are parsed first (though banner is safe)
     # Actually, we can just print banner after parsing args, but parsing args is fast.
@@ -235,7 +268,7 @@ def main() -> (
     )
 
     scanner = PortScanner(target_ports)
-    verifier = ServiceVerifier(args.path)
+    verifier = ServiceVerifier(args.path, timeout=args.timeout, retries=args.retries)
 
     found_services = []
     partial_matches = []
@@ -275,8 +308,8 @@ def main() -> (
         )
 
         # Parallel processing of hosts
-        # Cap workers at 10 to avoid overwhelming network/resources
-        max_workers = min(len(live_hosts), 10) or 1
+        # Cap workers to avoid overwhelming network/resources
+        max_workers = min(len(live_hosts), args.max_workers) or 1
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_ip = {
