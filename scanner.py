@@ -565,16 +565,48 @@ class PortScanner:  # pylint: disable=too-few-public-methods
         except (socket.error, OSError):
             return 0
 
-    def scan_host(self, ip: str) -> List[int]:
+    def scan_host(self, ip: str, parallel: bool = True) -> List[int]:
         """
         Scans all configured ports on a single host.
         Returns list of open ports.
+
+        Args:
+            ip: Target IP address
+            parallel: Use parallel scanning (faster for many ports)
         """
+        if parallel and len(self.ports) > 3:
+            # Parallel scanning - 5-10x faster for many ports
+            return self._scan_host_parallel(ip)
+        # Sequential for small port lists (less overhead)
+        return self._scan_host_sequential(ip)
+
+    def _scan_host_sequential(self, ip: str) -> List[int]:
+        """Sequential port scanning (low overhead for few ports)."""
         open_ports = []
         for port in self.ports:
             if self._check_port(ip, port):
                 open_ports.append(port)
         return open_ports
+
+    def _scan_host_parallel(self, ip: str) -> List[int]:
+        """Parallel port scanning using ThreadPoolExecutor."""
+        open_ports = []
+        # Limit workers to avoid overwhelming the target
+        max_workers = min(len(self.ports), 20)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all port checks
+            future_to_port = {
+                executor.submit(self._check_port, ip, port): port
+                for port in self.ports
+            }
+
+            for future in concurrent.futures.as_completed(future_to_port):
+                result = future.result()
+                if result:  # Non-zero means port is open
+                    open_ports.append(result)
+
+        return sorted(open_ports)
 
 
 class ServiceVerifier:  # pylint: disable=too-few-public-methods
