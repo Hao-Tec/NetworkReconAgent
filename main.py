@@ -102,7 +102,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def process_host(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+def process_host(  # pylint: disable=too-many-arguments,R0917
     ip: str,
     scanner: "PortScanner",
     verifier: "ServiceVerifier",
