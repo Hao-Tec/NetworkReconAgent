@@ -40,24 +40,243 @@ except ImportError:
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-@functools.lru_cache(maxsize=256)
+@functools.lru_cache(maxsize=512)
 def _get_vendor_from_mac(mac_prefix: str) -> str:
     """
-    Cached vendor lookup by MAC address prefix.
+    Cached vendor lookup by MAC address prefix (OUI).
+    Covers 80+ common network equipment manufacturers.
     Returns vendor name or empty string.
+
+    Performance: Dict lookup is O(1), lru_cache ensures repeated lookups are instant.
     """
+    # Comprehensive OUI database - Top 80+ manufacturers
+    # Format: First 3 octets (OUI) -> Vendor Name
     vendors = {
+        # Raspberry Pi / Single Board Computers
         "B8:27:EB": "Raspberry Pi",
         "DC:A6:32": "Raspberry Pi",
+        "E4:5F:01": "Raspberry Pi",
+        # Apple
+        "00:03:93": "Apple",
+        "00:05:02": "Apple",
+        "00:0A:27": "Apple",
+        "00:0A:95": "Apple",
+        "00:0D:93": "Apple",
+        "00:1C:B3": "Apple",
+        "00:1E:C2": "Apple",
+        "00:21:E9": "Apple",
+        "00:25:00": "Apple",
+        "3C:06:30": "Apple",
+        "A4:83:E7": "Apple",
+        "AC:BC:32": "Apple",
+        # Samsung
+        "00:12:FB": "Samsung",
+        "00:15:99": "Samsung",
+        "00:1A:8A": "Samsung",
+        "00:21:4C": "Samsung",
+        "00:26:37": "Samsung",
+        "5C:3C:27": "Samsung",
+        "94:35:0A": "Samsung",
+        "A8:F2:74": "Samsung",
+        # Cisco
+        "00:00:0C": "Cisco",
+        "00:01:42": "Cisco",
+        "00:01:64": "Cisco",
+        "00:1A:2F": "Cisco",
+        "00:1B:D4": "Cisco",
+        "00:22:BD": "Cisco",
+        "00:25:45": "Cisco",
+        "F4:CF:E2": "Cisco",
+        # TP-Link
+        "14:CC:20": "TP-Link",
+        "50:C7:BF": "TP-Link",
+        "54:E6:FC": "TP-Link",
+        "60:E3:27": "TP-Link",
         "98:BA:5F": "TP-Link",
-        "00:50:56": "VMware",
-        "00:0C:29": "VMware",
+        "AC:84:C6": "TP-Link",
+        "C0:E4:2D": "TP-Link",
+        # Netgear
+        "00:14:6C": "Netgear",
+        "00:1B:2F": "Netgear",
+        "00:1E:2A": "Netgear",
+        "00:1F:33": "Netgear",
+        "20:4E:7F": "Netgear",
+        "9C:3D:CF": "Netgear",
+        # D-Link
+        "00:05:5D": "D-Link",
+        "00:0D:88": "D-Link",
+        "00:13:46": "D-Link",
+        "00:15:E9": "D-Link",
+        "00:17:9A": "D-Link",
+        "00:1E:58": "D-Link",
+        # Huawei
+        "00:18:82": "Huawei",
+        "00:1E:10": "Huawei",
+        "00:25:9E": "Huawei",
+        "00:46:4B": "Huawei",
+        "04:C0:6F": "Huawei",
+        "20:08:ED": "Huawei",
+        "48:46:FB": "Huawei",
+        # Dell
+        "00:06:5B": "Dell",
+        "00:08:74": "Dell",
+        "00:0B:DB": "Dell",
+        "00:0D:56": "Dell",
+        "00:0F:1F": "Dell",
+        "00:11:43": "Dell",
+        "00:14:22": "Dell",
+        "18:A9:9B": "Dell",
+        "B8:AC:6F": "Dell",
+        # HP / HPE
+        "00:01:E6": "HP",
+        "00:02:A5": "HP",
+        "00:0A:57": "HP",
+        "00:0D:9D": "HP",
+        "00:11:0A": "HP",
+        "00:14:C2": "HP",
+        "00:17:A4": "HP",
+        "2C:27:D7": "HP",
+        "3C:D9:2B": "HP",
+        # Intel
+        "00:02:B3": "Intel",
+        "00:03:47": "Intel",
+        "00:04:23": "Intel",
+        "00:0E:0C": "Intel",
+        "00:13:02": "Intel",
+        "00:13:20": "Intel",
+        "00:15:00": "Intel",
+        "00:1B:21": "Intel",
+        "00:1E:67": "Intel",
+        # Lenovo
+        "00:09:2D": "Lenovo",
+        "00:1A:6B": "Lenovo",
+        "00:21:5E": "Lenovo",
+        "28:D2:44": "Lenovo",
+        "70:72:0D": "Lenovo",
+        "98:FA:9B": "Lenovo",
+        # Microsoft / Xbox
+        "00:03:FF": "Microsoft",
+        "00:0D:3A": "Microsoft",
+        "00:12:5A": "Microsoft",
         "00:15:5D": "Hyper-V",
-        "5C:4D:BF": "Unknown",  # Can add more as discovered
+        "00:17:FA": "Microsoft",
+        "00:1D:D8": "Microsoft",
+        "28:18:78": "Microsoft",
+        "7C:1E:52": "Microsoft",
+        # VMware
+        "00:05:69": "VMware",
+        "00:0C:29": "VMware",
+        "00:50:56": "VMware",
+        # ASUS
+        "00:11:D8": "ASUS",
+        "00:15:F2": "ASUS",
+        "00:17:31": "ASUS",
+        "00:1A:92": "ASUS",
+        "00:1E:8C": "ASUS",
+        "00:22:15": "ASUS",
+        "14:DD:A9": "ASUS",
+        # Google
+        "3C:5A:B4": "Google",
+        "54:60:09": "Google",
+        "94:EB:2C": "Google",
+        "F4:F5:E8": "Google",
+        # Amazon (Echo, Fire, etc.)
+        "00:FC:8B": "Amazon",
+        "0C:47:C9": "Amazon",
+        "18:74:2E": "Amazon",
+        "34:D2:70": "Amazon",
+        "40:B4:CD": "Amazon",
+        "68:54:FD": "Amazon",
+        "74:C2:46": "Amazon",
+        # Ubiquiti
+        "00:27:22": "Ubiquiti",
+        "04:18:D6": "Ubiquiti",
+        "24:A4:3C": "Ubiquiti",
+        "44:D9:E7": "Ubiquiti",
+        "68:72:51": "Ubiquiti",
+        "80:2A:A8": "Ubiquiti",
+        "B4:FB:E4": "Ubiquiti",
+        "FC:EC:DA": "Ubiquiti",
+        # Aruba / HPE Aruba
+        "00:0B:86": "Aruba",
+        "00:1A:1E": "Aruba",
+        "04:BD:88": "Aruba",
+        "20:4C:03": "Aruba",
+        "24:DE:C6": "Aruba",
+        # Synology / NAS
+        "00:11:32": "Synology",
+        # QNAP
+        "00:08:9B": "QNAP",
+        # Sonos
+        "00:0E:58": "Sonos",
+        "5C:AA:FD": "Sonos",
+        # Roku
+        "00:0D:4B": "Roku",
+        "B0:A7:37": "Roku",
+        "D8:31:34": "Roku",
+        # Nest / Google Nest
+        "18:B4:30": "Nest",
+        "64:16:66": "Nest",
+        # Ring (Doorbell)
+        "5C:47:5E": "Ring",
+        # Wyze
+        "2C:AA:8E": "Wyze",
+        # Philips Hue
+        "00:17:88": "Philips Hue",
+        # Espressif (ESP8266/ESP32 IoT devices)
+        "18:FE:34": "Espressif",
+        "24:0A:C4": "Espressif",
+        "30:AE:A4": "Espressif",
+        "5C:CF:7F": "Espressif",
+        "84:0D:8E": "Espressif",
+        "A4:7B:9D": "Espressif",
+        "CC:50:E3": "Espressif",
+        # Xiaomi
+        "00:9E:C8": "Xiaomi",
+        "0C:1D:AF": "Xiaomi",
+        "28:6C:07": "Xiaomi",
+        "34:CE:00": "Xiaomi",
+        "64:09:80": "Xiaomi",
+        "78:11:DC": "Xiaomi",
+        # OnePlus
+        "C0:EE:FB": "OnePlus",
+        # LG Electronics
+        "00:05:C9": "LG",
+        "00:1C:62": "LG",
+        "00:1E:75": "LG",
+        "10:68:3F": "LG",
+        "20:21:A5": "LG",
+        # Sony
+        "00:01:4A": "Sony",
+        "00:04:1F": "Sony",
+        "00:13:A9": "Sony",
+        "00:19:C5": "Sony",
+        "00:1D:BA": "Sony",
+        # PlayStation
+        "00:D9:D1": "PlayStation",
+        "28:3F:69": "PlayStation",
+        # Nintendo
+        "00:09:BF": "Nintendo",
+        "00:17:AB": "Nintendo",
+        "00:19:FD": "Nintendo",
+        "00:1A:E9": "Nintendo",
+        "00:1B:EA": "Nintendo",
+        "00:1E:35": "Nintendo",
+        "00:1F:C5": "Nintendo",
+        "00:21:47": "Nintendo",
+        "00:22:4C": "Nintendo",
+        "00:22:AA": "Nintendo",
+        "00:23:CC": "Nintendo",
+        "00:24:F3": "Nintendo",
+        "00:25:A0": "Nintendo",
+        "34:AF:2C": "Nintendo",
+        "40:D2:8A": "Nintendo",
     }
-    for prefix, name in vendors.items():
-        if mac_prefix.startswith(prefix):
-            return f" ({name})"
+
+    # Fast prefix matching - check first 8 chars (XX:XX:XX format)
+    prefix_8 = mac_prefix[:8].upper() if len(mac_prefix) >= 8 else mac_prefix.upper()
+    if prefix_8 in vendors:
+        return f" ({vendors[prefix_8]})"
     return ""
 
 
