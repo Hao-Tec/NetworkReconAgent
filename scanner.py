@@ -61,6 +61,67 @@ def _get_vendor_from_mac(mac_prefix: str) -> str:
     return ""
 
 
+def _fingerprint_web_response(headers: dict, text: str) -> str:
+    """
+    Shared fingerprinting logic for web responses.
+    Used by both sync and async verifiers to avoid code duplication.
+
+    Args:
+        headers: Dictionary of response headers (lowercase keys preferred)
+        text: Response body text (first 5KB recommended)
+
+    Returns:
+        Comma-separated string of detected technologies
+    """
+    hints = []
+
+    # Normalize headers to lowercase
+    headers_lower = {k.lower(): v for k, v in headers.items()}
+
+    # 1. Server header
+    server = headers_lower.get("server", "")
+    if server:
+        hints.append(server)
+
+    # 2. Powered-By Header
+    powered_by = headers_lower.get("x-powered-by", "")
+    if powered_by:
+        hints.append(powered_by)
+
+    # Limit text to first 5KB for performance
+    text = text[:5000] if text else ""
+
+    # CMS Detection
+    # Moodle
+    if "moodle" in text.lower() or "course/view.php" in text:
+        version_match = re.search(
+            r'content="Moodle ([0-9.]+)"', text, re.IGNORECASE
+        )
+        if version_match:
+            hints.append(f"Moodle {version_match.group(1)}")
+        else:
+            hints.append("Moodle")
+
+    # WordPress
+    if "wp-content" in text or "wordpress" in text.lower():
+        hints.append("WordPress")
+
+    # Canvas LMS
+    if "canvas" in text.lower() and "instructure" in text.lower():
+        hints.append("Canvas LMS")
+
+    # Blackboard
+    if "blackboard.com" in text.lower():
+        hints.append("Blackboard")
+
+    # 3. HTML Title
+    title_match = re.search(r"<title>(.*?)</title>", text, re.IGNORECASE)
+    if title_match:
+        title = title_match.group(1).strip()[:40]  # Cap length
+        hints.append(f"Title: {title}")
+
+    return ", ".join(hints) if hints else "Generic Web Server"
+
 
 def get_local_network() -> str:
     """
@@ -139,7 +200,7 @@ class HostDiscovery:  # pylint: disable=too-few-public-methods
         """
         Performs ARP scanning using Scapy (fast local network discovery).
         """
-        # pylint: disable=import-outside-toplevel,redefined-outer-name,import-error
+        # pylint: disable=import-outside-toplevel,redefined-outer-name,import-error,no-name-in-module
         from scapy.all import ARP, Ether, srp
 
         # Build ARP request packet
@@ -419,52 +480,7 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
         """
         Identifies the web service/technology from response headers and body.
         """
-        hints = []
-        headers = {k.lower(): v for k, v in response.headers.items()}
-
-        # 1. Server header
-        server = headers.get("server", "")
-        if server:
-            hints.append(server)
-
-        # 2. Powered-By Header
-        powered_by = headers.get("x-powered-by", "")
-        if powered_by:
-            hints.append(powered_by)
-
-        # Parse HTML for deeper fingerprinting (CMS detection)
-        text = response.text[:5000]  # Limit to first 5KB
-
-        # Moodle detection
-        if "moodle" in text.lower() or "course/view.php" in text:
-            # Try to extract version from meta or generator
-            version_match = re.search(
-                r'content="Moodle ([0-9.]+)"', text, re.IGNORECASE
-            )
-            if version_match:
-                hints.append(f"Moodle {version_match.group(1)}")
-            else:
-                hints.append("Moodle")
-
-        # WordPress
-        if "wp-content" in text or "wordpress" in text.lower():
-            hints.append("WordPress")
-
-        # Canvas LMS
-        if "canvas" in text.lower() and "instructure" in text.lower():
-            hints.append("Canvas LMS")
-
-        # Blackboard
-        if "blackboard.com" in text.lower():
-            hints.append("Blackboard")
-
-        # 3. HTML Title
-        title_match = re.search(r"<title>(.*?)</title>", text, re.IGNORECASE)
-        if title_match:
-            title = title_match.group(1).strip()[:40]  # Cap length
-            hints.append(f"Title: {title}")
-
-        return ", ".join(hints) if hints else "Generic Web Server"
+        return _fingerprint_web_response(dict(response.headers), response.text)
 
 
 # Async version for Phase 2
@@ -562,51 +578,8 @@ class AsyncServiceVerifier:  # pylint: disable=too-few-public-methods
     def _identify_service_from_text(
         self, response: aiohttp.ClientResponse, text: str
     ) -> str:
-        """Identifies service from response (similar to sync version)."""
-        hints = []
-
-        # Server header
-        server = response.headers.get("server", "")
-        if server:
-            hints.append(server)
-
-        # Powered-By
-        powered_by = response.headers.get("x-powered-by", "")
-        if powered_by:
-            hints.append(powered_by)
-
-        # Limit text
-        text = text[:5000]
-
-        # Moodle
-        if "moodle" in text.lower() or "course/view.php" in text:
-            version_match = re.search(
-                r'content="Moodle ([0-9.]+)"', text, re.IGNORECASE
-            )
-            if version_match:
-                hints.append(f"Moodle {version_match.group(1)}")
-            else:
-                hints.append("Moodle")
-
-        # WordPress
-        if "wp-content" in text or "wordpress" in text.lower():
-            hints.append("WordPress")
-
-        # Canvas
-        if "canvas" in text.lower() and "instructure" in text.lower():
-            hints.append("Canvas LMS")
-
-        # Blackboard
-        if "blackboard.com" in text.lower():
-            hints.append("Blackboard")
-
-        # Title
-        title_match = re.search(r"<title>(.*?)</title>", text, re.IGNORECASE)
-        if title_match:
-            title = title_match.group(1).strip()[:40]
-            hints.append(f"Title: {title}")
-
-        return ", ".join(hints) if hints else "Generic Web Server"
+        """Identifies service from response using shared fingerprinting logic."""
+        return _fingerprint_web_response(dict(response.headers), text)
 
 
 class BannerGrabber:  # pylint: disable=too-few-public-methods
