@@ -10,6 +10,7 @@ import re
 import uuid
 import functools
 import asyncio
+import importlib.util
 from typing import List, Tuple
 
 import requests
@@ -28,13 +29,9 @@ try:
 except ImportError:
     psutil = None
 
-try:
-    # pylint: disable=import-error,unused-import
-    from scapy.all import ARP, Ether, srp
+# Lazy check for scapy availability to improve startup time
+HAS_SCAPY = importlib.util.find_spec("scapy") is not None
 
-    HAS_SCAPY = True
-except ImportError:
-    HAS_SCAPY = False
 
 # Suppress InsecureRequestWarning from urllib3/requests
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
