@@ -9,6 +9,7 @@ import concurrent.futures
 import re
 import uuid
 import functools
+import asyncio
 from typing import List, Tuple
 
 import requests
@@ -17,11 +18,18 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 try:
+    import aiohttp
+    HAS_AIOHTTP = True
+except ImportError:
+    HAS_AIOHTTP = False
+
+try:
     import psutil
 except ImportError:
     psutil = None
 
 try:
+    # pylint: disable=import-error,unused-import
     from scapy.all import ARP, Ether, srp
 
     HAS_SCAPY = True
@@ -73,159 +81,173 @@ def get_local_network() -> str:
             s.connect(("8.8.8.8", 80))
             local_ip = s.getsockname()[0]
 
+        # Now look up that IP's subnet in psutil
         for _, addrs in psutil.net_if_addrs().items():
             for addr in addrs:
                 if addr.family == socket.AF_INET and addr.address == local_ip:
-                    # Found our interface
-                    # psutil returns netmask (e.g., 255.255.255.0)
+                    # Found it
+                    netmask = addr.netmask
                     network = ipaddress.IPv4Network(
-                        f"{local_ip}/{addr.netmask}", strict=False
+                        f"{local_ip}/{netmask}", strict=False
                     )
                     return str(network)
 
-        return default_subnet
-
     except (OSError, ValueError):
-        return default_subnet
+        pass
 
-
-class ArpScanner:  # pylint: disable=too-few-public-methods
-    """Scans for hosts using ARP requests (faster replacement for Ping on local network)."""
-
-    def __init__(self, subnet: str):
-        self.subnet = subnet
-
-    def scan(self) -> List[str]:
-        """
-        Sends ARP broadcast to subnet and returns list of live IPs.
-        """
-        if not HAS_SCAPY:
-            print("[!] Scapy not found or failed to import. Falling back...")
-            return []
-
-        try:
-            print(f"[*] ARP Scanning {self.subnet}...")
-            # Create ARP request packet
-            arp = ARP(pdst=self.subnet)
-            ether = Ether(dst="ff:ff:ff:ff:ff:ff")
-            packet = ether / arp
-
-            # Send packet and wait for response
-            # timeout=2, verbose=0
-            result = srp(packet, timeout=2, verbose=0)[0]
-
-            live_hosts = []
-            for _, received in result:
-                live_hosts.append(received.psrc)
-
-            return sorted(live_hosts)
-
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            # Scapy might fail if no Npcap/privileges
-            print(f"[!] ARP scan failed: {e}. Falling back to Ping.")
-            return []
+    return default_subnet
 
 
 class HostDiscovery:  # pylint: disable=too-few-public-methods
-    """Discovers live hosts in a network subnet using ARP (local) or Ping."""
+    """
+    Performs host discovery on a given subnet.
+    Prefers ARP scanning if scapy is available, otherwise uses Ping.
+    """
 
     def __init__(self, subnet: str):
         self.subnet = subnet
-        self.system = platform.system().lower()
+        self.method = "ARP" if HAS_SCAPY else "Ping"
 
-    def _ping(self, ip: str) -> bool:
-        """
-        Pings an IP address to check if it's alive.
-        Returns True if host responds, False otherwise.
-        """
-        try:
-            # -n 1 for Windows, -c 1 for Unix/Linux
-            count_param = "-n" if "windows" in self.system else "-c"
-            # -w 1000 (ms) for Windows, -W 1 (s) for Unix/Linux
-            timeout_param = "-w" if "windows" in self.system else "-W"
-            timeout_value = "500" if "windows" in self.system else "1"
-
-            # Reduce output noise by capturing stdout/stderr
-            command = ["ping", count_param, "1", timeout_param, timeout_value, ip]
-            result = subprocess.run(
-                command,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
-            return result.returncode == 0
-        except OSError:
-            return False
-
-    def scan(self, max_workers: int = 50, progress_callback=None) -> List[str]:
+    def scan(
+        self, max_workers: int = 50, progress_callback=None, message_callback=None
+    ) -> List[str]:  # pylint: disable=too-many-locals
         """
         Scans the subnet for live hosts. Uses ARP if capable, otherwise Ping.
         """
-        # Try ARP first if Scapy is available
-        if HAS_SCAPY:
-            # Check if subnet is manageable size for ARP (usually always is true for local)
-            arp_scanner = ArpScanner(self.subnet)
-            hosts = arp_scanner.scan()
-            if hosts:
-                return hosts
-            # If ARP returned nothing, might be failure or remote network, fall through to Ping
-
-        # Fallback to Ping Scanner
-        live_hosts = []
+        # Parse subnet to get list of IPs
         try:
-            network = ipaddress.ip_network(self.subnet, strict=False)
+            network = ipaddress.IPv4Network(self.subnet, strict=False)
+        except ValueError:
+            return []
+
+        # Filter broadcast and network addresses (unless it's a /31 or /32 special case)
+        if network.prefixlen < 31:
             hosts = [str(ip) for ip in network.hosts()]
+        else:
+            hosts = [str(ip) for ip in network]
 
-            print(f"[*] Ping Scanning {self.subnet} ({len(hosts)} IPs)...")
+        if message_callback:
+            message_callback(f"[*] {self.method} Scanning {self.subnet}...")
 
-            with concurrent.futures.ThreadPoolExecutor(
-                max_workers=max_workers
-            ) as executor:
-                future_to_ip = {executor.submit(self._ping, ip): ip for ip in hosts}
-                for future in concurrent.futures.as_completed(future_to_ip):
-                    ip = future_to_ip[future]
-                    if future.result():
-                        # print(f"[+] Host found: {ip}")
-                        live_hosts.append(ip)
+        if self.method == "ARP":
+            return self._arp_scan(hosts, progress_callback)
 
-                    if progress_callback:
-                        progress_callback()
+        # Fallback: Ping
+        return self._ping_scan(hosts, max_workers, progress_callback)
 
-        except ValueError as e:
-            print(f"[!] Invalid subnet: {e}")
+    def _arp_scan(self, hosts: List[str], progress_callback=None) -> List[str]:  # pylint: disable=unused-argument
+        """
+        Performs ARP scanning using Scapy (fast local network discovery).
+        """
+        # pylint: disable=import-outside-toplevel,redefined-outer-name,import-error
+        from scapy.all import ARP, Ether, srp
 
-        return sorted(live_hosts)
+        # Build ARP request packet
+        # We'll send to all hosts in one shot if subnet is small enough.
+        # For large subnets, we might need chunking, but scapy is pretty fast.
+
+        arp_request = ARP(pdst=self.subnet)
+        broadcast = Ether(dst="ff:ff:ff:ff:ff:ff")
+        packet = broadcast / arp_request
+
+        # Send and receive. We use timeout=2
+        # srp returns (answered, unanswered)
+        answered, _ = srp(packet, timeout=2, verbose=False)
+
+        live_hosts = []
+        for _, received in answered:
+            live_hosts.append(received.psrc)
+            if progress_callback:
+                progress_callback()
+
+        return live_hosts
+
+    def _ping_scan(
+        self, hosts: List[str], max_workers: int, progress_callback=None
+    ) -> List[str]:
+        """
+        Ping-based host discovery (used as fallback if ARP isn't available).
+        """
+        live_hosts = []
+
+        def ping_host(ip: str) -> str:
+            """Ping a single host. Returns IP if reachable, else None."""
+            param = "-n" if platform.system().lower() == "windows" else "-c"
+            command = ["ping", param, "1", "-w", "1000", ip]
+            try:
+                result = subprocess.run(
+                    command,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=2,
+                    check=False,
+                )
+                if result.returncode == 0:
+                    return ip
+            except (subprocess.TimeoutExpired, OSError):
+                pass
+            return None
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_ip = {executor.submit(ping_host, ip): ip for ip in hosts}
+
+            for future in concurrent.futures.as_completed(future_to_ip):
+                result = future.result()
+                if result:
+                    live_hosts.append(result)
+                if progress_callback:
+                    progress_callback()
+
+        return live_hosts
 
 
 class MacScanner:  # pylint: disable=too-few-public-methods
-    """Queries ARP cache to retrieve MAC addresses and vendor information."""
+    """Scans and caches MAC addresses from ARP table."""
 
     def __init__(self):
         self.arp_cache = {}
-        self._refresh_arp()
+        self._populate_arp_cache()
 
-    def _refresh_arp(self):
-        """
-        Parses 'arp -a' output to build an IP -> MAC mapping.
-        """
+    def _populate_arp_cache(self):
+        """Populates the ARP cache by calling system ARP command."""
         try:
-            # Run arp -a
-            output = subprocess.check_output("arp -a", shell=True).decode(
-                "utf-8", errors="ignore"
-            )
-
-            # Regex to find IP and MAC: matches "192.168.x.x ... aa-bb-cc-dd-ee-ff"
-            # Windows output format: Use robust regex
-            pattern = re.compile(
-                r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+([0-9a-fA-F:-]{17})\s+"
-            )
-
-            for line in output.splitlines():
-                match = pattern.search(line)
-                if match:
-                    ip = match.group(1)
-                    mac = match.group(2).replace("-", ":").upper()
-                    self.arp_cache[ip] = mac
+            if platform.system().lower() == "windows":
+                result = subprocess.run(
+                    ["arp", "-a"],
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                    check=False,
+                )
+                # Parse Windows ARP output
+                # Example: 192.168.1.1          00-11-22-33-44-55     dynamic
+                for line in result.stdout.splitlines():
+                    match = re.search(
+                        r"(\d+\.\d+\.\d+\.\d+)\s+([\da-fA-F\-]{17})", line
+                    )
+                    if match:
+                        ip = match.group(1)
+                        mac = match.group(2).replace("-", ":").upper()
+                        self.arp_cache[ip] = mac
+            else:
+                # Linux/Mac
+                result = subprocess.run(
+                    ["arp", "-n"],
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                    check=False,
+                )
+                # Parse Linux/Mac ARP output
+                # Example: 192.168.1.1  ether   00:11:22:33:44:55   C   eth0
+                for line in result.stdout.splitlines():
+                    match = re.search(
+                        r"(\d+\.\d+\.\d+\.\d+)\s+.*?([\da-fA-F:]{17})", line
+                    )
+                    if match:
+                        ip = match.group(1)
+                        mac = match.group(2).replace("-", ":").upper()
+                        self.arp_cache[ip] = mac
 
         except (subprocess.CalledProcessError, OSError):
             # Could not run arp or parse output on this platform
@@ -257,31 +279,22 @@ class PortScanner:  # pylint: disable=too-few-public-methods
         """
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(1.0)
+                sock.settimeout(0.5)
                 result = sock.connect_ex((ip, port))
-                if result == 0:
-                    return port
-        except OSError:
-            # network error connecting to socket
+                return port if result == 0 else 0
+        except (socket.error, OSError):
             return 0
-        return 0
 
     def scan_host(self, ip: str) -> List[int]:
         """
-        Scans a single host for the defined list of ports.
+        Scans all configured ports on a single host.
+        Returns list of open ports.
         """
         open_ports = []
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=min(len(self.ports), 20)
-        ) as executor:
-            future_to_port = {
-                executor.submit(self._check_port, ip, port): port for port in self.ports
-            }
-            for future in concurrent.futures.as_completed(future_to_port):
-                result = future.result()
-                if result != 0:
-                    open_ports.append(result)
-        return sorted(open_ports)
+        for port in self.ports:
+            if self._check_port(ip, port):
+                open_ports.append(port)
+        return open_ports
 
 
 class ServiceVerifier:  # pylint: disable=too-few-public-methods
@@ -375,103 +388,222 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
                     # network/HTTP error for this URL - try next
                     continue
 
-        return "NONE", "", 0, ""
+        # Nothing found
+        return ("NOT_FOUND", "", 0, "")
 
     def _is_wildcard_response(
         self, base_url: str, original_response: requests.Response
     ) -> bool:
         """
-        Checks if the server returns similar successful responses for non-existent paths.
-        Returns True if the 'original_response' is likely a False Positive (wildcard).
+        Checks if the server returns 200 for random paths (wildcard/soft 404).
         """
+        random_path = f"/{uuid.uuid4().hex}"
         try:
-            # Generate a random path that shouldn't exist
-            random_path = f"/{uuid.uuid4()}"
-            random_url = f"{base_url}{random_path}"
-
-            random_response = self.session.get(
-                random_url, timeout=3, allow_redirects=True, verify=False
+            test_resp = self.session.get(
+                f"{base_url}{random_path}",
+                timeout=self.timeout,
+                allow_redirects=True,
+                verify=False,
             )
-
-            # If the random path is NOT 200, then the server is normal (honest 404s)
-            # So the original 200 meant something real.
-            if random_response.status_code != 200:
-                return False
-
-            # If random path IS 200, the server is a "Wildcard Host" (returns 200 for everything)
-            # We must compare the content to see if the original path provided unique content.
-
-            # 1. Compare Content Length (Allow 5% variance for dynamic timestamps etc)
-            orig_len = len(original_response.content)
-            rand_len = len(random_response.content)
-
-            if orig_len == 0 or rand_len == 0:
-                return True  # Suspicious empty responses
-
-            diff_percent = abs(orig_len - rand_len) / max(orig_len, rand_len)
-            if diff_percent < 0.05:
-                # Content length is basically the same -> Likely same page
+            # If random path also gives 200 and similar content length, it's a wildcard
+            if (
+                test_resp.status_code == 200
+                and abs(len(test_resp.text) - len(original_response.text)) < 100
+            ):
                 return True
-
-            # 2. Compare Titles (Strongest check)
-            orig_title = self._get_title(original_response.text)
-            rand_title = self._get_title(random_response.text)
-
-            if orig_title == rand_title:
-                return True  # Same title -> Likely same page
-
-            # If length differs signficantly AND title differs -> It's a Real Page
-            return False
-
         except requests.RequestException:
-            return False  # Verification failed, assume original was real to be safe
-
-    def _get_title(self, html: str) -> str:
-        match = re.search(r"<title>(.*?)</title>", html, re.IGNORECASE)
-        return match.group(1).strip() if match else ""
+            pass
+        return False
 
     def _identify_service(self, response: requests.Response) -> str:
         """
-        Analyzes headers and body to identify the technology and version.
+        Identifies the web service/technology from response headers and body.
         """
         hints = []
-        text = response.text
-        lower_text = text.lower()
-        headers = response.headers
+        headers = {k.lower(): v for k, v in response.headers.items()}
 
-        # 1. Technology Signatures (Keyword match)
-        technologies = {
-            "Moodle": ["moodle", "pluginfile.php"],
-            "WordPress": ["wordpress", "wp-content"],
-            "Joomla": ["joomla"],
-            "Drupal": ["drupal"],
-            "Canvas": ["canvas", "instructure"],
-            "Blackboard": ["blackboard"],
-        }
+        # 1. Server header
+        server = headers.get("server", "")
+        if server:
+            hints.append(server)
 
-        for tech, keywords in technologies.items():
-            if any(k in lower_text for k in keywords):
-                # Try to find version using regex
-                param_str = ""
-                # Moodle version regex examples: "Moodle 3.11", "var M.cfg = ... version"
-                if tech == "Moodle":
-                    # Look for explicit text or meta tags
-                    v_match = re.search(r"Moodle (\d+(\.\d+)+)", text, re.IGNORECASE)
-                    if v_match:
-                        param_str = f" v{v_match.group(1)}"
+        # 2. Powered-By Header
+        powered_by = headers.get("x-powered-by", "")
+        if powered_by:
+            hints.append(powered_by)
 
-                hints.append(f"{tech}{param_str}")
+        # Parse HTML for deeper fingerprinting (CMS detection)
+        text = response.text[:5000]  # Limit to first 5KB
 
-        # 2. Server Headers
-        if "server" in headers:
-            hints.append(headers["server"])
-        if "x-powered-by" in headers:
-            hints.append(headers["x-powered-by"])
+        # Moodle detection
+        if "moodle" in text.lower() or "course/view.php" in text:
+            # Try to extract version from meta or generator
+            version_match = re.search(
+                r'content="Moodle ([0-9.]+)"', text, re.IGNORECASE
+            )
+            if version_match:
+                hints.append(f"Moodle {version_match.group(1)}")
+            else:
+                hints.append("Moodle")
+
+        # WordPress
+        if "wp-content" in text or "wordpress" in text.lower():
+            hints.append("WordPress")
+
+        # Canvas LMS
+        if "canvas" in text.lower() and "instructure" in text.lower():
+            hints.append("Canvas LMS")
+
+        # Blackboard
+        if "blackboard.com" in text.lower():
+            hints.append("Blackboard")
 
         # 3. HTML Title
         title_match = re.search(r"<title>(.*?)</title>", text, re.IGNORECASE)
         if title_match:
             title = title_match.group(1).strip()[:40]  # Cap length
+            hints.append(f"Title: {title}")
+
+        return ", ".join(hints) if hints else "Generic Web Server"
+
+
+# Async version for Phase 2
+class AsyncServiceVerifier:  # pylint: disable=too-few-public-methods
+    """Async version of ServiceVerifier using aiohttp for higher concurrency."""
+
+    def __init__(self, check_path: str = "/", timeout: int = 3):
+        self.check_path = check_path
+        self.timeout = timeout
+        if not self.check_path.startswith("/"):
+            self.check_path = "/" + self.check_path
+
+    async def check_http(  # pylint: disable=too-many-locals
+        self, ip: str, port: int, check_paths: List[str] = None
+    ) -> Tuple[str, str, int, str]:
+        """
+        Async checks if a web service exists.
+        Returns (StatusType, URL, StatusCode, Fingerprint)
+        """
+        if not HAS_AIOHTTP:
+            raise RuntimeError("aiohttp is required for async operations")
+
+        schemes = ["https", "http"] if port in [443, 8443] else ["http"]
+
+        if check_paths is None:
+            check_paths = [self.check_path]
+            if self.check_path != "/":
+                check_paths.append("/")
+
+        timeout = aiohttp.ClientTimeout(total=self.timeout)
+        connector = aiohttp.TCPConnector(ssl=False)
+
+        async with aiohttp.ClientSession(
+            timeout=timeout, connector=connector
+        ) as session:
+            for scheme in schemes:
+                base_url = f"{scheme}://{ip}:{port}"
+
+                for path in check_paths:
+                    target_url = f"{base_url}{path}"
+                    try:
+                        async with session.get(
+                            target_url, allow_redirects=True
+                        ) as response:
+                            # Get response body
+                            text = await response.text()
+                            fingerprint = self._identify_service_from_text(
+                                response, text
+                            )
+
+                            if response.status in (200, 401, 403) or (
+                                300 <= response.status < 400
+                            ):
+                                # Wildcard check
+                                if response.status == 200 and await self._is_wildcard_response(
+                                    session, base_url, text
+                                ):
+                                    continue
+
+                                status_type = (
+                                    "FOUND" if path == self.check_path else "ROOT_ONLY"
+                                )
+                                if "Moodle" in fingerprint and status_type == "ROOT_ONLY":
+                                    status_type = "FOUND_MATCH"
+
+                                return (
+                                    status_type,
+                                    target_url,
+                                    response.status,
+                                    fingerprint,
+                                )
+
+                    except (aiohttp.ClientError, asyncio.TimeoutError):
+                        continue
+
+        return ("NOT_FOUND", "", 0, "")
+
+    async def _is_wildcard_response(
+        self, session: aiohttp.ClientSession, base_url: str, original_text: str
+    ) -> bool:
+        """Async wildcard detection."""
+        random_path = f"/{uuid.uuid4().hex}"
+        try:
+            async with session.get(f"{base_url}{random_path}") as test_resp:
+                test_text = await test_resp.text()
+                if (
+                    test_resp.status == 200
+                    and abs(len(test_text) - len(original_text)) < 100
+                ):
+                    return True
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            pass
+        return False
+
+    def _identify_service_from_text(
+        self, response: aiohttp.ClientResponse, text: str
+    ) -> str:
+        """Identifies service from response (similar to sync version)."""
+        hints = []
+
+        # Server header
+        server = response.headers.get("server", "")
+        if server:
+            hints.append(server)
+
+        # Powered-By
+        powered_by = response.headers.get("x-powered-by", "")
+        if powered_by:
+            hints.append(powered_by)
+
+        # Limit text
+        text = text[:5000]
+
+        # Moodle
+        if "moodle" in text.lower() or "course/view.php" in text:
+            version_match = re.search(
+                r'content="Moodle ([0-9.]+)"', text, re.IGNORECASE
+            )
+            if version_match:
+                hints.append(f"Moodle {version_match.group(1)}")
+            else:
+                hints.append("Moodle")
+
+        # WordPress
+        if "wp-content" in text or "wordpress" in text.lower():
+            hints.append("WordPress")
+
+        # Canvas
+        if "canvas" in text.lower() and "instructure" in text.lower():
+            hints.append("Canvas LMS")
+
+        # Blackboard
+        if "blackboard.com" in text.lower():
+            hints.append("Blackboard")
+
+        # Title
+        title_match = re.search(r"<title>(.*?)</title>", text, re.IGNORECASE)
+        if title_match:
+            title = title_match.group(1).strip()[:40]
             hints.append(f"Title: {title}")
 
         return ", ".join(hints) if hints else "Generic Web Server"
