@@ -62,7 +62,7 @@
 - **🔢 Flexible Port Scanning**: Ranges (`--ports 100-200`), lists, or `--all-ports`
 - **🕸️ Deep Web Enumeration**: Auto-detects Moodle, WordPress, Canvas, Blackboard
 - **🧠 Smart Auto-Discovery**: Automatically detects local subnet (`/24`)
-- **📡 MAC Vendor Resolution**: Identifies device manufacturers (Raspberry Pi, TP-Link, etc.)
+- **📡 MAC Vendor Resolution**: 270+ OUI entries (ZTE, Huawei, Cisco, Apple, Samsung, etc.)
 - **🛡️ SSL/TLS Support**: Handles self-signed certificates gracefully
 
 ---
