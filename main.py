@@ -21,6 +21,7 @@ from scanner import (
     MacScanner,
 )
 from banner import print_banner
+from reporter import save_report
 
 console = Console()
 
@@ -60,6 +61,10 @@ def parse_args() -> argparse.Namespace:
         "--debug",
         action="store_true",
         help="Enable full traceback for debugging.",
+    )
+    parser.add_argument(
+        "--output",
+        help="Path to save report (e.g. report.json or report.csv).",
     )
     return parser.parse_args()
 
@@ -102,9 +107,9 @@ def process_host(  # pylint: disable=too-many-arguments,too-many-positional-argu
                 progress.console.print(
                     f"[magenta]          Detected: {fingerprint}[/magenta]"
                 )
-            local_found.append((ip, url, status_code, fingerprint))
+            local_found.append((ip, port, url, status_code, fingerprint))
         elif status_type == "ROOT_ONLY":
-            local_partial.append((ip, url, status_code, fingerprint))
+            local_partial.append((ip, port, url, status_code, fingerprint))
 
     progress.advance(scan_task)
     return local_found, local_partial
@@ -205,9 +210,17 @@ def main() -> (
 
     # Initialize MAC Scanner and show basic info
     mac_scanner = MacScanner()
+
+    # Create a table for better readability of results
+    host_table = Table(show_header=True, header_style="bold magenta")
+    host_table.add_column("IP Address", style="green")
+    host_table.add_column("MAC Address / Vendor", style="cyan")
+
     for host in live_hosts:
         mac_info = mac_scanner.get_mac_info(host)
-        print(f"    - {host} {Fore.CYAN}{mac_info}{Style.RESET_ALL}")
+        host_table.add_row(host, mac_info or "-")
+
+    console.print(host_table)
 
     # 2. Port Scanning & Service Verification
     ports_display = str(target_ports)
@@ -299,7 +312,7 @@ def main() -> (
         table.add_column("Status", style="green")
         table.add_column("Technology", style="magenta")
 
-        for ip, url, status, fp in found_services:
+        for ip, port, url, status, fp in found_services:
             table.add_row(url, str(status), fp)
 
         console.print(table)
@@ -313,10 +326,44 @@ def main() -> (
         table.add_column("Status", style="green")
         table.add_column("Technology", style="magenta")
 
-        for ip, url, status, fp in partial_matches:
+        for ip, port, url, status, fp in partial_matches:
             table.add_row(url, str(status), f"{fp} (Root path works)")
 
         console.print(table)
+
+    # Generate Report if requested
+    if args.output:
+        # 1. Initialize hosts map
+        hosts_map = {}
+        for h in live_hosts:
+            hosts_map[h] = {
+                "ip": h,
+                "mac": mac_scanner.get_mac_info(h) or "Unknown",
+                "services": []
+            }
+
+        # 2. Add services
+        all_findings = found_services + partial_matches
+        for ip, port, url, status, fp in all_findings:
+            if ip in hosts_map:
+                hosts_map[ip]["services"].append({
+                    "port": port,
+                    "url": url,
+                    "status": status,
+                    "fingerprint": fp
+                })
+
+        # 3. Build final data structure
+        report_data = {
+            "scan_info": {
+                "subnet": target_subnet,
+                "ports": str(target_ports) if len(target_ports) < 20 else "Range/Large List",
+                "target_path": args.path
+            },
+            "hosts": list(hosts_map.values())
+        }
+
+        save_report(report_data, args.output)
 
     if not found_services and not partial_matches:
         print(
