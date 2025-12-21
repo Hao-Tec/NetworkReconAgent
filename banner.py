@@ -13,7 +13,7 @@ from rich.live import Live
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.align import Align
 
-console = Console()
+console = Console(force_terminal=True)
 
 
 def matrix_rain(duration=3.0):
@@ -82,6 +82,8 @@ def system_breach_sequence():
         TextColumn("[bold red]{task.description}"),
         BarColumn(bar_width=None, style="red dim", complete_style="bold red"),
         TextColumn("[bold yellow]{task.percentage:>3.0f}%"),
+        console=console,
+        refresh_per_second=20,
         transient=True,
     ) as progress:
 
@@ -98,6 +100,8 @@ def system_breach_sequence():
         TextColumn("[bold cyan]{task.description}"),
         BarColumn(bar_width=None, style="cyan dim", complete_style="bold cyan"),
         TextColumn("[bold cyan]{task.percentage:>3.0f}%"),
+        console=console,
+        refresh_per_second=20,
         transient=True,
     ) as progress:
 
