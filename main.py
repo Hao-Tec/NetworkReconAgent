@@ -10,7 +10,14 @@ import concurrent.futures
 import ipaddress
 import logging
 import asyncio
-from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    BarColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
 from rich.console import Console
 from rich.table import Table
 from colorama import init, Fore, Style
@@ -309,6 +316,8 @@ def main() -> (
         TextColumn("[bold cyan]{task.description}"),
         BarColumn(bar_width=None, style="cyan dim", complete_style="bold cyan"),
         TextColumn("[bold cyan]{task.percentage:>3.0f}%"),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
         transient=True,
     ) as progress:
         task = progress.add_task(f"Discovering hosts in {target_subnet}...", total=total_hosts)
@@ -394,6 +403,8 @@ def main() -> (
         TextColumn("[bold blue]{task.description}"),
         BarColumn(bar_width=None, style="blue dim", complete_style="bold blue"),
         TextColumn("[bold blue]{task.percentage:>3.0f}%"),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
         transient=False,
     ) as progress:
 
@@ -465,7 +476,7 @@ def main() -> (
         table.add_column("Technology", style="magenta")
 
         for ip, port, url, status, fp in found_services:
-            table.add_row(url, str(status), fp)
+            table.add_row(f"[link={url}]{url}[/link]", str(status), fp)
 
         console.print(table)
 
@@ -479,7 +490,7 @@ def main() -> (
         table.add_column("Technology", style="magenta")
 
         for ip, port, url, status, fp in partial_matches:
-            table.add_row(url, str(status), f"{fp} (Root path works)")
+            table.add_row(f"[link={url}]{url}[/link]", str(status), f"{fp} (Root path works)")
 
         console.print(table)
 
