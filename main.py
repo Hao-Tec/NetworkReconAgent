@@ -285,14 +285,15 @@ def main() -> (
     # Auto-detect subnet if not provided
     target_subnet = args.subnet or None
     if not target_subnet:
-        print(
-            Fore.YELLOW
-            + "[*] No subnet specified. Auto-detecting local network..."
-            + Style.RESET_ALL,
-            end="",
+        with console.status(
+            "[bold yellow]No subnet specified. Auto-detecting local network...[/bold yellow]",
+            spinner="dots",
+        ):
+            target_subnet = get_local_network()
+        console.print(
+            f"[bold green][+][/bold green] Auto-detected network: "
+            f"[bold cyan]{target_subnet}[/bold cyan]"
         )
-        target_subnet = get_local_network()
-        print(Fore.CYAN + str(target_subnet) + Style.RESET_ALL)
 
     # Delegate main work to helper objects below
     discoverer = HostDiscovery(target_subnet)
