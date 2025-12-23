@@ -533,7 +533,13 @@ class HostDiscovery:  # pylint: disable=too-few-public-methods
             message_callback(f"[*] {self.method} Scanning {self.subnet}...")
 
         if self.method == "ARP":
-            return self._arp_scan(hosts, progress_callback)
+            try:
+                return self._arp_scan(hosts, progress_callback)
+            except (PermissionError, OSError):
+                # Fallback to Ping if ARP fails (e.g. no admin privileges)
+                if message_callback:
+                    message_callback("[!] ARP scan failed (permission denied). Falling back to Ping...")
+                # self.method = "Ping" # Implicitly falling back for this run
 
         # Fallback: Ping
         return self._ping_scan(hosts, max_workers, progress_callback)
