@@ -40,22 +40,13 @@ except ImportError:
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-@functools.lru_cache(maxsize=512)
-def _get_vendor_from_mac(mac_prefix: str) -> str:
-    """
-    Cached vendor lookup by MAC address prefix (OUI).
-    Covers 80+ common network equipment manufacturers.
-    Returns vendor name or empty string.
-
-    Performance: Dict lookup is O(1), lru_cache ensures repeated lookups are instant.
-    """
-    # Comprehensive OUI database - Top 80+ manufacturers
-    # Format: First 3 octets (OUI) -> Vendor Name
-    vendors = {
-        # Raspberry Pi / Single Board Computers
-        "B8:27:EB": "Raspberry Pi",
-        "DC:A6:32": "Raspberry Pi",
-        "E4:5F:01": "Raspberry Pi",
+# Comprehensive OUI database - Top 80+ manufacturers
+# Format: First 3 octets (OUI) -> Vendor Name
+MAC_VENDORS = {
+    # Raspberry Pi / Single Board Computers
+    "B8:27:EB": "Raspberry Pi",
+    "DC:A6:32": "Raspberry Pi",
+    "E4:5F:01": "Raspberry Pi",
         # Apple
         "00:03:93": "Apple",
         "00:05:02": "Apple",
@@ -394,12 +385,22 @@ def _get_vendor_from_mac(mac_prefix: str) -> str:
         "00:25:A0": "Nintendo",
         "34:AF:2C": "Nintendo",
         "40:D2:8A": "Nintendo",
-    }
+}
 
+
+@functools.lru_cache(maxsize=512)
+def _get_vendor_from_mac(mac_prefix: str) -> str:
+    """
+    Cached vendor lookup by MAC address prefix (OUI).
+    Covers 80+ common network equipment manufacturers.
+    Returns vendor name or empty string.
+
+    Performance: Dict lookup is O(1), lru_cache ensures repeated lookups are instant.
+    """
     # Fast prefix matching - check first 8 chars (XX:XX:XX format)
     prefix_8 = mac_prefix[:8].upper() if len(mac_prefix) >= 8 else mac_prefix.upper()
-    if prefix_8 in vendors:
-        return f" ({vendors[prefix_8]})"
+    if prefix_8 in MAC_VENDORS:
+        return f" ({MAC_VENDORS[prefix_8]})"
     return ""
 
 
@@ -523,22 +524,22 @@ class HostDiscovery:  # pylint: disable=too-few-public-methods
         except ValueError:
             return []
 
+        if message_callback:
+            message_callback(f"[*] {self.method} Scanning {self.subnet}...")
+
+        if self.method == "ARP":
+            return self._arp_scan(progress_callback)
+
+        # Fallback: Ping
         # Filter broadcast and network addresses (unless it's a /31 or /32 special case)
         if network.prefixlen < 31:
             hosts = [str(ip) for ip in network.hosts()]
         else:
             hosts = [str(ip) for ip in network]
 
-        if message_callback:
-            message_callback(f"[*] {self.method} Scanning {self.subnet}...")
-
-        if self.method == "ARP":
-            return self._arp_scan(hosts, progress_callback)
-
-        # Fallback: Ping
         return self._ping_scan(hosts, max_workers, progress_callback)
 
-    def _arp_scan(self, hosts: List[str], progress_callback=None) -> List[str]:  # pylint: disable=unused-argument
+    def _arp_scan(self, progress_callback=None) -> List[str]:
         """
         Performs ARP scanning using Scapy (fast local network discovery).
         """
