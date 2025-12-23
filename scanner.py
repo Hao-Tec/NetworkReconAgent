@@ -19,6 +19,7 @@ from urllib3.util.retry import Retry
 
 try:
     import aiohttp
+
     HAS_AIOHTTP = True
 except ImportError:
     HAS_AIOHTTP = False
@@ -436,9 +437,7 @@ def _fingerprint_web_response(headers: dict, text: str) -> str:
     # CMS Detection
     # Moodle
     if "moodle" in text.lower() or "course/view.php" in text:
-        version_match = re.search(
-            r'content="Moodle ([0-9.]+)"', text, re.IGNORECASE
-        )
+        version_match = re.search(r'content="Moodle ([0-9.]+)"', text, re.IGNORECASE)
         if version_match:
             hints.append(f"Moodle {version_match.group(1)}")
         else:
@@ -538,13 +537,17 @@ class HostDiscovery:  # pylint: disable=too-few-public-methods
             except (PermissionError, OSError):
                 # Fallback to Ping if ARP fails (e.g. no admin privileges)
                 if message_callback:
-                    message_callback("[!] ARP scan failed (permission denied). Falling back to Ping...")
+                    message_callback(
+                        "[!] ARP scan failed (permission denied). Falling back to Ping..."
+                    )
                 # self.method = "Ping" # Implicitly falling back for this run
 
         # Fallback: Ping
         return self._ping_scan(hosts, max_workers, progress_callback)
 
-    def _arp_scan(self, hosts: List[str], progress_callback=None) -> List[str]:  # pylint: disable=unused-argument
+    def _arp_scan(  # pylint: disable=unused-argument
+        self, hosts: List[str], progress_callback=None
+    ) -> List[str]:
         """
         Performs ARP scanning using Scapy (fast local network discovery).
         """
@@ -726,8 +729,7 @@ class PortScanner:  # pylint: disable=too-few-public-methods
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit all port checks
             future_to_port = {
-                executor.submit(self._check_port, ip, port): port
-                for port in self.ports
+                executor.submit(self._check_port, ip, port): port for port in self.ports
             }
 
             for future in concurrent.futures.as_completed(future_to_port):
@@ -757,14 +759,14 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
             total=retries,
             backoff_factor=0.5,  # 0.5s, 1s, 2s delays
             status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["HEAD", "GET", "OPTIONS"]
+            allowed_methods=["HEAD", "GET", "OPTIONS"],
         )
 
         # Mount adapter with retry strategy and connection pooling
         adapter = HTTPAdapter(
             max_retries=retry_strategy,
             pool_connections=50,  # Connection pool size
-            pool_maxsize=50
+            pool_maxsize=50,
         )
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
@@ -791,7 +793,10 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
                 target_url = f"{base_url}{path}"
                 try:
                     response = self.session.get(
-                        target_url, timeout=self.timeout, allow_redirects=True, verify=False
+                        target_url,
+                        timeout=self.timeout,
+                        allow_redirects=True,
+                        verify=False,
                     )
 
                     # Fingerprinting logic
@@ -915,15 +920,21 @@ class AsyncServiceVerifier:  # pylint: disable=too-few-public-methods
                                 300 <= response.status < 400
                             ):
                                 # Wildcard check
-                                if response.status == 200 and await self._is_wildcard_response(
-                                    session, base_url, text
+                                if (
+                                    response.status == 200
+                                    and await self._is_wildcard_response(
+                                        session, base_url, text
+                                    )
                                 ):
                                     continue
 
                                 status_type = (
                                     "FOUND" if path == self.check_path else "ROOT_ONLY"
                                 )
-                                if "Moodle" in fingerprint and status_type == "ROOT_ONLY":
+                                if (
+                                    "Moodle" in fingerprint
+                                    and status_type == "ROOT_ONLY"
+                                ):
                                     status_type = "FOUND_MATCH"
 
                                 return (
@@ -966,7 +977,9 @@ class BannerGrabber:  # pylint: disable=too-few-public-methods
     """Grabs banners from various network services for fingerprinting."""
 
     @staticmethod
-    def grab_banner(ip: str, port: int, timeout: float = 2.0) -> str:  # pylint: disable=too-many-return-statements,too-many-branches
+    def grab_banner(  # pylint: disable=too-many-return-statements,too-many-branches
+        ip: str, port: int, timeout: float = 2.0
+    ) -> str:
         """
         Attempts to grab a banner from a service by connecting and reading initial response.
         Returns the banner string or empty string if failed.
@@ -979,11 +992,11 @@ class BannerGrabber:  # pylint: disable=too-few-public-methods
                 # Send protocol-specific probes
                 if port == 22:  # SSH
                     # SSH servers send banner immediately
-                    banner = sock.recv(1024).decode('utf-8', errors='ignore').strip()
+                    banner = sock.recv(1024).decode("utf-8", errors="ignore").strip()
                     return f"SSH: {banner}"
 
                 if port == 21:  # FTP
-                    banner = sock.recv(1024).decode('utf-8', errors='ignore').strip()
+                    banner = sock.recv(1024).decode("utf-8", errors="ignore").strip()
                     return f"FTP: {banner}"
 
                 if port in (3306, 3307):  # MySQL/MariaDB
@@ -992,9 +1005,11 @@ class BannerGrabber:  # pylint: disable=too-few-public-methods
                     try:
                         # Parse MySQL protocol version (rough)
                         if len(data) > 5 and data[4] in (9, 10):  # Protocol version
-                            version_end = data.find(b'\x00', 5)
+                            version_end = data.find(b"\x00", 5)
                             if version_end > 0:
-                                version = data[5:version_end].decode('utf-8', errors='ignore')
+                                version = data[5:version_end].decode(
+                                    "utf-8", errors="ignore"
+                                )
                                 return f"MySQL/MariaDB: {version}"
                     except (ValueError, UnicodeDecodeError):
                         pass
@@ -1006,11 +1021,11 @@ class BannerGrabber:  # pylint: disable=too-few-public-methods
 
                 if port == 6379:  # Redis
                     sock.sendall(b"INFO server\r\n")
-                    response = sock.recv(4096).decode('utf-8', errors='ignore')
+                    response = sock.recv(4096).decode("utf-8", errors="ignore")
                     if "redis_version:" in response:
-                        for line in response.split('\n'):
-                            if line.startswith('redis_version:'):
-                                version = line.split(':')[1].strip()
+                        for line in response.split("\n"):
+                            if line.startswith("redis_version:"):
+                                version = line.split(":")[1].strip()
                                 return f"Redis: {version}"
                     return "Redis (Detected)"
 
@@ -1021,14 +1036,14 @@ class BannerGrabber:  # pylint: disable=too-few-public-methods
                     return "Microsoft SQL Server (Detected)"
 
                 if port == 5672:  # RabbitMQ
-                    banner = sock.recv(1024).decode('utf-8', errors='ignore')
+                    banner = sock.recv(1024).decode("utf-8", errors="ignore")
                     if "AMQP" in banner:
                         return f"RabbitMQ: {banner.strip()}"
                     return "RabbitMQ (Detected)"
 
                 # Generic banner grab - just read what server sends
                 sock.sendall(b"\r\n")
-                banner = sock.recv(1024).decode('utf-8', errors='ignore').strip()
+                banner = sock.recv(1024).decode("utf-8", errors="ignore").strip()
                 if banner:
                     return banner[:100]  # Truncate long banners
 
