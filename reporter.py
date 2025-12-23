@@ -36,6 +36,17 @@ def _save_json(data: Dict[str, Any], filename: str) -> None:
         print(f"[!] Error saving JSON report: {e}")
 
 
+def _sanitize_csv_cell(cell_data: Any) -> Any:
+    """
+    Sanitizes data to prevent CSV Injection (Formula Injection).
+    Prepends a single quote if the data starts with =, +, -, or @.
+    """
+    if isinstance(cell_data, str):
+        if cell_data.startswith(("=", "+", "-", "@")):
+            return f"'{cell_data}"
+    return cell_data
+
+
 def _save_csv(data: Dict[str, Any], filename: str) -> None:
     """Saves flat data as CSV. Flattens the hierarchical structure."""
     try:
@@ -57,7 +68,7 @@ def _save_csv(data: Dict[str, Any], filename: str) -> None:
                         "port": svc.get("port"),
                         "url": svc.get("url"),
                         "status": svc.get("status"),
-                        "fingerprint": svc.get("fingerprint"),
+                        "fingerprint": _sanitize_csv_cell(svc.get("fingerprint")),
                         "type": "Web Service"
                     })
             else:
