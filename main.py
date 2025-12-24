@@ -471,7 +471,7 @@ def main() -> (
         table.add_column("Technology", style="magenta")
 
         for ip, port, url, status, fp in found_services:
-            table.add_row(url, str(status), fp)
+            table.add_row(f"[link={url}]{url}[/link]", str(status), fp)
 
         console.print(table)
 
@@ -485,7 +485,7 @@ def main() -> (
         table.add_column("Technology", style="magenta")
 
         for ip, port, url, status, fp in partial_matches:
-            table.add_row(url, str(status), f"{fp} (Root path works)")
+            table.add_row(f"[link={url}]{url}[/link]", str(status), f"{fp} (Root path works)")
 
         console.print(table)
 

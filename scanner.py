@@ -675,7 +675,7 @@ class MacScanner:  # pylint: disable=too-few-public-methods
 
         # Use cached vendor lookup
         vendor = _get_vendor_from_mac(mac)
-        return f"[{mac}]{vendor}"
+        return f"{mac}{vendor}"
 
 
 class PortScanner:  # pylint: disable=too-few-public-methods
