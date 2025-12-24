@@ -362,7 +362,12 @@ def main() -> (
         + Style.RESET_ALL
     )
 
-    scanner = PortScanner(target_ports)
+    # Scale thread pool based on host concurrency
+    # We want enough threads for all concurrent hosts to check ports
+    # Default behavior: 20 hosts * 20 ports = 400 threads
+    # We cap at 500 to be safe
+    total_threads = min((args.max_workers * 20), 500)
+    scanner = PortScanner(target_ports, max_threads=total_threads)
 
     # Create verifier based on async mode
     if args.use_async:
@@ -458,6 +463,9 @@ def main() -> (
                     except Exception as exc:  # pylint: disable=broad-exception-caught
                         if args.debug:
                             print(f"Generated an exception: {exc}")
+
+    # Cleanup scanner resources
+    scanner.close()
 
     print(Fore.YELLOW + "\n[3] Reconnaissance Complete." + Style.RESET_ALL)
 
