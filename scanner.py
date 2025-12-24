@@ -797,10 +797,21 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
                         timeout=self.timeout,
                         allow_redirects=True,
                         verify=False,
+                        stream=True,  # Prevent download of huge responses
                     )
 
+                    # Safe read of first 10KB
+                    content = b""
+                    for chunk in response.iter_content(chunk_size=1024):
+                        content += chunk
+                        if len(content) > 10240:
+                            break
+                    response.close()  # Close connection
+
+                    text = content.decode("utf-8", errors="ignore")
+
                     # Fingerprinting logic
-                    fingerprint = self._identify_service(response)
+                    fingerprint = self._identify_service(response, text)
 
                     if response.status_code in (200, 401, 403) or (
                         300 <= response.status_code < 400
@@ -809,7 +820,7 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
                         # If we found a 200 OK, check if a random path also
                         # returns 200 OK with same content
                         if response.status_code == 200 and self._is_wildcard_response(
-                            base_url, response
+                            base_url, len(text)
                         ):
                             # matches wildcard behavior -> likely just a router login page
                             # for *any* URL
@@ -837,9 +848,7 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
         # Nothing found
         return ("NOT_FOUND", "", 0, "")
 
-    def _is_wildcard_response(
-        self, base_url: str, original_response: requests.Response
-    ) -> bool:
+    def _is_wildcard_response(self, base_url: str, original_length: int) -> bool:
         """
         Checks if the server returns 200 for random paths (wildcard/soft 404).
         """
@@ -850,22 +859,39 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
                 timeout=self.timeout,
                 allow_redirects=True,
                 verify=False,
+                stream=True,
             )
+
+            # Read partial content safely for comparison
+            content = b""
+            for chunk in test_resp.iter_content(chunk_size=1024):
+                content += chunk
+                if len(content) > 10240:
+                    break
+            test_resp.close()
+
+            test_text = content.decode("utf-8", errors="ignore")
+
             # If random path also gives 200 and similar content length, it's a wildcard
             if (
                 test_resp.status_code == 200
-                and abs(len(test_resp.text) - len(original_response.text)) < 100
+                and abs(len(test_text) - original_length) < 100
             ):
                 return True
         except requests.RequestException:
             pass
         return False
 
-    def _identify_service(self, response: requests.Response) -> str:
+    def _identify_service(
+        self, response: requests.Response, text_content: str = None
+    ) -> str:
         """
         Identifies the web service/technology from response headers and body.
         """
-        return _fingerprint_web_response(dict(response.headers), response.text)
+        if text_content is None:
+            # Fallback if text not provided (should not happen with new logic)
+            return _fingerprint_web_response(dict(response.headers), "")
+        return _fingerprint_web_response(dict(response.headers), text_content)
 
 
 # Async version for Phase 2
@@ -910,8 +936,11 @@ class AsyncServiceVerifier:  # pylint: disable=too-few-public-methods
                         async with session.get(
                             target_url, allow_redirects=True
                         ) as response:
-                            # Get response body
-                            text = await response.text()
+                            # Safe read of first 10KB
+                            # aiohttp.StreamReader.read() reads n bytes
+                            content = await response.content.read(10240)
+                            text = content.decode("utf-8", errors="ignore")
+
                             fingerprint = self._identify_service_from_text(
                                 response, text
                             )
@@ -923,7 +952,7 @@ class AsyncServiceVerifier:  # pylint: disable=too-few-public-methods
                                 if (
                                     response.status == 200
                                     and await self._is_wildcard_response(
-                                        session, base_url, text
+                                        session, base_url, len(text)
                                     )
                                 ):
                                     continue
@@ -950,16 +979,19 @@ class AsyncServiceVerifier:  # pylint: disable=too-few-public-methods
         return ("NOT_FOUND", "", 0, "")
 
     async def _is_wildcard_response(
-        self, session: aiohttp.ClientSession, base_url: str, original_text: str
+        self, session: aiohttp.ClientSession, base_url: str, original_length: int
     ) -> bool:
         """Async wildcard detection."""
         random_path = f"/{uuid.uuid4().hex}"
         try:
             async with session.get(f"{base_url}{random_path}") as test_resp:
-                test_text = await test_resp.text()
+                # Read partial content safely
+                test_content = await test_resp.content.read(10240)
+                test_text = test_content.decode("utf-8", errors="ignore")
+
                 if (
                     test_resp.status == 200
-                    and abs(len(test_text) - len(original_text)) < 100
+                    and abs(len(test_text) - original_length) < 100
                 ):
                     return True
         except (aiohttp.ClientError, asyncio.TimeoutError):
