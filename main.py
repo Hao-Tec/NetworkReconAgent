@@ -461,6 +461,9 @@ def main() -> (
 
     print(Fore.YELLOW + "\n[3] Reconnaissance Complete." + Style.RESET_ALL)
 
+    # Cleanup resources
+    scanner.close()
+
     if found_services:
         table = Table(
             title=f"SUMMARY: Found {len(found_services)} TARGET MATCHES",
