@@ -13,6 +13,8 @@ import asyncio
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.console import Console
 from rich.table import Table
+from rich.panel import Panel
+from rich.text import Text
 from colorama import init, Fore, Style
 
 from scanner import (
@@ -524,13 +526,24 @@ def main() -> (
         save_report(report_data, args.output)
 
     if not found_services and not partial_matches:
-        print(
-            Fore.RED
-            + f"\nNo web services found matching path '{args.path}'."
-            + Style.RESET_ALL
+        summary_text = Text()
+        summary_text.append(
+            f"No web services found matching path '{args.path}'.\n", style="bold red"
         )
-        print("However, the following hosts are alive: " + ", ".join(live_hosts))
-        print("Tip: Try scanning all ports with nmap if you still can't find it.")
+        summary_text.append(
+            f"\nLive hosts detected ({len(live_hosts)}):\n", style="bold yellow"
+        )
+        summary_text.append(", ".join(live_hosts) + "\n", style="cyan")
+        summary_text.append("\nNext Steps:\n", style="bold white")
+        summary_text.append("1. Try scanning all ports: ", style="dim")
+        summary_text.append("--all-ports\n", style="green")
+        summary_text.append("2. Try a different path: ", style="dim")
+        summary_text.append("--path /admin/\n", style="green")
+        summary_text.append("3. Use nmap for deep scanning", style="dim")
+
+        console.print(
+            Panel(summary_text, title="Scan Complete - No Matches", border_style="red")
+        )
 
 
 if __name__ == "__main__":
