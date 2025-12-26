@@ -683,6 +683,19 @@ class PortScanner:  # pylint: disable=too-few-public-methods
 
     def __init__(self, ports: List[int]):
         self.ports = ports
+        # Shared thread pool to avoid overhead of creating one per host
+        # Limit to 200 workers to balance concurrency across multiple hosts
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=200)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def close(self):
+        """Shuts down the internal thread pool."""
+        self.executor.shutdown(wait=True)
 
     def _check_port(self, ip: str, port: int) -> int:
         """
@@ -721,21 +734,18 @@ class PortScanner:  # pylint: disable=too-few-public-methods
         return open_ports
 
     def _scan_host_parallel(self, ip: str) -> List[int]:
-        """Parallel port scanning using ThreadPoolExecutor."""
+        """Parallel port scanning using shared ThreadPoolExecutor."""
         open_ports = []
-        # Limit workers to avoid overwhelming the target
-        max_workers = min(len(self.ports), 20)
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all port checks
-            future_to_port = {
-                executor.submit(self._check_port, ip, port): port for port in self.ports
-            }
+        # Submit all port checks to the shared executor
+        future_to_port = {
+            self.executor.submit(self._check_port, ip, port): port for port in self.ports
+        }
 
-            for future in concurrent.futures.as_completed(future_to_port):
-                result = future.result()
-                if result:  # Non-zero means port is open
-                    open_ports.append(result)
+        for future in concurrent.futures.as_completed(future_to_port):
+            result = future.result()
+            if result:  # Non-zero means port is open
+                open_ports.append(result)
 
         return sorted(open_ports)
 
