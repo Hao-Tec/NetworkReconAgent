@@ -1,3 +1,3 @@
-## 2024-05-24 - [Graceful Degradation over Hard Fails]
-**Learning:** The application was configured to crash immediately with a `PermissionError` when run without Admin privileges, despite claiming to support a fallback mode. This creates a hostile user experience ("you did it wrong") instead of a helpful one ("let me fix that for you"). Users expect tools to be resilient and do their best with available permissions.
-**Action:** Implement automatic fallbacks for privileged operations (like raw socket scanning) to unprivileged alternatives (like Ping/Connect), informing the user of the downgrade rather than exiting.
+## 2024-05-23 - [Rich Panels for Empty States]
+**Learning:** Users often miss "No Results" messages when they are just colored text. Wrapping them in a `rich.panel.Panel` creates a distinct visual block that draws attention and makes the "failure" state feel more like a structured report.
+**Action:** Use `rich.panel.Panel` with `rich.text.Text` for all major status summaries, especially empty or error states, to improve readability and perceived quality.
