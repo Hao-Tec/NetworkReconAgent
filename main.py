@@ -395,69 +395,70 @@ def main() -> (
         if p not in common_paths and args.path.rstrip("/") != p.rstrip("/"):
             common_paths.append(p)
 
-    with Progress(
-        SpinnerColumn(style="bold cyan"),
-        TextColumn("[bold blue]{task.description}"),
-        BarColumn(bar_width=None, style="blue dim", complete_style="bold blue"),
-        TextColumn("[bold blue]{task.percentage:>3.0f}%"),
-        transient=False,
-    ) as progress:
+    with scanner:
+        with Progress(
+            SpinnerColumn(style="bold cyan"),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=None, style="blue dim", complete_style="bold blue"),
+            TextColumn("[bold blue]{task.percentage:>3.0f}%"),
+            transient=False,
+        ) as progress:
 
-        scan_task = progress.add_task(
-            "[bold cyan]Scanning hosts...", total=len(live_hosts)
-        )
+            scan_task = progress.add_task(
+                "[bold cyan]Scanning hosts...", total=len(live_hosts)
+            )
 
-        # Parallel processing of hosts
-        # Cap workers to avoid overwhelming network/resources
-        max_workers = min(len(live_hosts), args.max_workers) or 1
+            # Parallel processing of hosts
+            # Cap workers to avoid overwhelming network/resources
+            max_workers = min(len(live_hosts), args.max_workers) or 1
 
-        if args.use_async:
-            # Async mode - 10-50x faster!
-            semaphore = asyncio.Semaphore(args.max_workers)
+            if args.use_async:
+                # Async mode - 10-50x faster!
+                semaphore = asyncio.Semaphore(args.max_workers)
 
-            async def scan_all_async():
-                tasks = [
-                    async_process_host(
-                        ip, scanner, verifier, common_paths, progress, scan_task, semaphore
-                    )
-                    for ip in live_hosts
-                ]
-                return await asyncio.gather(*tasks, return_exceptions=True)
+                async def scan_all_async():
+                    tasks = [
+                        async_process_host(
+                            ip, scanner, verifier, common_paths, progress, scan_task, semaphore
+                        )
+                        for ip in live_hosts
+                    ]
+                    return await asyncio.gather(*tasks, return_exceptions=True)
 
-            results = asyncio.run(scan_all_async())
+                results = asyncio.run(scan_all_async())
 
-            for result in results:
-                if isinstance(result, Exception):
-                    if args.debug:
-                        print(f"Generated an exception: {result}")
-                else:
-                    found, partial = result
-                    found_services.extend(found)
-                    partial_matches.extend(partial)
-        else:
-            # Sync mode - traditional threading
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_ip = {
-                    executor.submit(
-                        process_host,
-                        ip,
-                        scanner,
-                        verifier,
-                        common_paths,
-                        progress,
-                        scan_task,
-                    ): ip
-                    for ip in live_hosts
-                }
-
-                for future in concurrent.futures.as_completed(future_to_ip):
-                    try:
-                        found, partial = future.result()
+                for result in results:
+                    if isinstance(result, Exception):
+                        if args.debug:
+                            print(f"Generated an exception: {result}")
+                    else:
+                        found, partial = result
                         found_services.extend(found)
                         partial_matches.extend(partial)
-                    except Exception as exc:  # pylint: disable=broad-exception-caught
-                        if args.debug:
-                            print(f"Generated an exception: {exc}")
+            else:
+                # Sync mode - traditional threading
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    future_to_ip = {
+                        executor.submit(
+                            process_host,
+                            ip,
+                            scanner,
+                            verifier,
+                            common_paths,
+                            progress,
+                            scan_task,
+                        ): ip
+                        for ip in live_hosts
+                    }
+
+                    for future in concurrent.futures.as_completed(future_to_ip):
+                        try:
+                            found, partial = future.result()
+                            found_services.extend(found)
+                            partial_matches.extend(partial)
+                        except Exception as exc:  # pylint: disable=broad-exception-caught
+                            if args.debug:
+                                print(f"Generated an exception: {exc}")
 
     print(Fore.YELLOW + "\n[3] Reconnaissance Complete." + Style.RESET_ALL)
 
