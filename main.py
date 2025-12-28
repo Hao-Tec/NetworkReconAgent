@@ -14,6 +14,8 @@ from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.console import Console
 from rich.table import Table
 from rich.markup import escape
+from rich.panel import Panel
+from rich.text import Text
 from colorama import init, Fore, Style
 
 from scanner import (
@@ -537,13 +539,20 @@ def main() -> (
         save_report(report_data, args.output)
 
     if not found_services and not partial_matches:
-        print(
-            Fore.RED
-            + f"\nNo web services found matching path '{args.path}'."
-            + Style.RESET_ALL
+        no_results_text = Text()
+        no_results_text.append(
+            f"No web services found matching path '{args.path}'.\n\n", style="bold red"
         )
-        print("However, the following hosts are alive: " + ", ".join(live_hosts))
-        print("Tip: Try scanning all ports with nmap if you still can't find it.")
+        no_results_text.append(
+            "However, the following hosts are alive:\n", style="yellow"
+        )
+        no_results_text.append(", ".join(live_hosts) + "\n\n", style="green")
+        no_results_text.append(
+            "Tip: Try scanning all ports with --all-ports if you still can't find it.",
+            style="italic cyan",
+        )
+
+        console.print(Panel(no_results_text, title="Scan Results", border_style="red"))
 
 
 if __name__ == "__main__":
