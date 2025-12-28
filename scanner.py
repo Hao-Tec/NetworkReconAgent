@@ -30,11 +30,12 @@ except ImportError:
     psutil = None
 
 try:
-    # pylint: disable=import-error,unused-import
-    from scapy.all import ARP, Ether, srp
+    # Check if scapy is available without fully loading it (avoids npcap issues)
+    # pylint: disable=import-error
+    import importlib.util
 
-    HAS_SCAPY = True
-except ImportError:
+    HAS_SCAPY = importlib.util.find_spec("scapy") is not None
+except Exception:  # pylint: disable=broad-exception-caught
     HAS_SCAPY = False
 
 # Suppress InsecureRequestWarning from urllib3/requests
