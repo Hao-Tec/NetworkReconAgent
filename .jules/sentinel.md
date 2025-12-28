@@ -1,0 +1,4 @@
+## 2024-03-24 - [Terminal Injection via Rich Markup]
+**Vulnerability:** The application uses `rich` library to print data from untrusted sources (server headers, banners, URLs) directly into the console. If a malicious server returns a header like `Server: [bold red]Hacked[/bold red]`, `rich` interprets it as markup, leading to Terminal Injection / Style Spoofing.
+**Learning:** Libraries that provide rich terminal formatting (like `rich`) often interpret markup tags by default. Treating external input as safe for printing can allow attackers to manipulate the terminal output, potentially hiding information or spoofing status messages.
+**Prevention:** Always use `rich.markup.escape()` (or equivalent sanitization) when interpolating untrusted data into `rich` strings or tables. Treat all network data (headers, banners, paths) as untrusted.

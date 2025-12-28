@@ -13,6 +13,7 @@ import asyncio
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.console import Console
 from rich.table import Table
+from rich.markup import escape
 from colorama import init, Fore, Style
 
 from scanner import (
@@ -133,12 +134,12 @@ def process_host(  # pylint: disable=too-many-arguments,R0917
 
         if status_type in ("FOUND", "FOUND_MATCH"):
             progress.console.print(
-                f"[bold green][SUCCESS] Found SERVICE at {url} "
+                f"[bold green][SUCCESS] Found SERVICE at {escape(url)} "
                 f"(Status: {status_code})[/bold green]"
             )
             if fingerprint:
                 progress.console.print(
-                    f"[magenta]          Detected: {fingerprint}[/magenta]"
+                    f"[magenta]          Detected: {escape(fingerprint)}[/magenta]"
                 )
             local_found.append((ip, port, url, status_code, fingerprint))
         elif status_type == "ROOT_ONLY":
@@ -148,7 +149,7 @@ def process_host(  # pylint: disable=too-many-arguments,R0917
             banner = BannerGrabber.identify_service(ip, port)
             if banner and "Unknown service" not in banner:
                 progress.console.print(
-                    f"[bold cyan][INFO] Found {banner} at {ip}:{port}[/bold cyan]"
+                    f"[bold cyan][INFO] Found {escape(banner)} at {ip}:{port}[/bold cyan]"
                 )
                 # Add to partial matches with banner info
                 local_partial.append((ip, port, f"{ip}:{port}", 0, banner))
@@ -190,12 +191,12 @@ async def async_process_host(  # pylint: disable=too-many-arguments,R0917,too-ma
 
             if status_type in ("FOUND", "FOUND_MATCH"):
                 progress.console.print(
-                    f"[bold green][SUCCESS] Found SERVICE at {url} "
+                    f"[bold green][SUCCESS] Found SERVICE at {escape(url)} "
                     f"(Status: {status_code})[/bold green]"
                 )
                 if fingerprint:
                     progress.console.print(
-                        f"[magenta]          Detected: {fingerprint}[/magenta]"
+                        f"[magenta]          Detected: {escape(fingerprint)}[/magenta]"
                     )
                 local_found.append((ip, port, url, status_code, fingerprint))
             elif status_type == "ROOT_ONLY":
@@ -208,7 +209,7 @@ async def async_process_host(  # pylint: disable=too-many-arguments,R0917,too-ma
                 )
                 if banner and "Unknown service" not in banner:
                     progress.console.print(
-                        f"[bold cyan][INFO] Found {banner} at {ip}:{port}[/bold cyan]"
+                        f"[bold cyan][INFO] Found {escape(banner)} at {ip}:{port}[/bold cyan]"
                     )
                     local_partial.append((ip, port, f"{ip}:{port}", 0, banner))
 
@@ -471,7 +472,8 @@ def main() -> (
         table.add_column("Technology", style="magenta")
 
         for ip, port, url, status, fp in found_services:
-            table.add_row(url, str(status), fp)
+            # Escape content to prevent markup injection in the table
+            table.add_row(escape(url), str(status), escape(fp) if fp else "")
 
         console.print(table)
 
@@ -485,7 +487,8 @@ def main() -> (
         table.add_column("Technology", style="magenta")
 
         for ip, port, url, status, fp in partial_matches:
-            table.add_row(url, str(status), f"{fp} (Root path works)")
+            safe_fp = escape(fp) if fp else ""
+            table.add_row(escape(url), str(status), f"{safe_fp} (Root path works)")
 
         console.print(table)
 
