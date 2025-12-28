@@ -683,6 +683,14 @@ class PortScanner:  # pylint: disable=too-few-public-methods
 
     def __init__(self, ports: List[int]):
         self.ports = ports
+        # Shared executor for parallel scanning to reduce thread creation overhead
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=500)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.executor.shutdown(wait=True)
 
     def _check_port(self, ip: str, port: int) -> int:
         """
@@ -721,21 +729,40 @@ class PortScanner:  # pylint: disable=too-few-public-methods
         return open_ports
 
     def _scan_host_parallel(self, ip: str) -> List[int]:
-        """Parallel port scanning using ThreadPoolExecutor."""
+        """Parallel port scanning using shared ThreadPoolExecutor with throttling."""
         open_ports = []
-        # Limit workers to avoid overwhelming the target
-        max_workers = min(len(self.ports), 20)
+        # Maintain concurrency limit per host to avoid overwhelming it
+        # but use the shared executor to avoid thread creation overhead
+        max_concurrency = 20
+        running_futures = set()
+        ports_iter = iter(self.ports)
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all port checks
-            future_to_port = {
-                executor.submit(self._check_port, ip, port): port for port in self.ports
-            }
+        def submit_next():
+            """Helper to submit next port check if available."""
+            try:
+                port = next(ports_iter)
+                fut = self.executor.submit(self._check_port, ip, port)
+                running_futures.add(fut)
+                return True
+            except StopIteration:
+                return False
 
-            for future in concurrent.futures.as_completed(future_to_port):
-                result = future.result()
-                if result:  # Non-zero means port is open
+        # Fill the initial window
+        for _ in range(max_concurrency):
+            if not submit_next():
+                break
+
+        # Process results as they complete and refill the window
+        while running_futures:
+            done, running_futures = concurrent.futures.wait(
+                running_futures, return_when=concurrent.futures.FIRST_COMPLETED
+            )
+
+            for fut in done:
+                result = fut.result()
+                if result:
                     open_ports.append(result)
+                submit_next()
 
         return sorted(open_ports)
 
