@@ -13,6 +13,8 @@ import asyncio
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.console import Console
 from rich.table import Table
+from rich.panel import Panel
+from rich.text import Text
 from colorama import init, Fore, Style
 
 from scanner import (
@@ -29,6 +31,14 @@ from banner import print_banner
 from reporter import save_report
 
 console = Console()
+
+
+def print_error(title: str, message: str, suggestion: str = None) -> None:
+    """Prints a styled error message using Rich panels."""
+    content = Text(message, style="red")
+    if suggestion:
+        content.append(f"\n\nTip: {suggestion}", style="bold yellow")
+    console.print(Panel(content, title=f"[bold red]{title}[/bold red]", border_style="red"))
 
 
 def parse_args() -> argparse.Namespace:
@@ -233,11 +243,10 @@ def main() -> (
 
     # Check async mode requirements
     if args.use_async and not HAS_AIOHTTP:
-        print(
-            Fore.RED
-            + "[!] Async mode requires aiohttp. Install it with:"
-            + "\n    pip install aiohttp"
-            + Style.RESET_ALL
+        print_error(
+            "Dependency Missing",
+            "Async mode requires 'aiohttp' library.",
+            "Install it with: pip install aiohttp"
         )
         sys.exit(1)
 
@@ -274,11 +283,10 @@ def main() -> (
             target_ports = sorted(list(set(target_ports)))
 
         except ValueError:
-            print(
-                Fore.RED
-                + "[!] Error: Invalid port format. Please use comma-separated "
-                + "numbers or ranges (e.g. 80-90)."
-                + Style.RESET_ALL
+            print_error(
+                "Input Error",
+                "Invalid port format.",
+                "Use comma-separated numbers or ranges (e.g. 80,443,8000-8080)."
             )
             sys.exit(1)
 
@@ -524,37 +532,42 @@ def main() -> (
         save_report(report_data, args.output)
 
     if not found_services and not partial_matches:
-        print(
-            Fore.RED
-            + f"\nNo web services found matching path '{args.path}'."
-            + Style.RESET_ALL
+        # UX Improvement: Use Panel for empty state
+        msg = Text(f"No web services found matching path '{args.path}'.", style="yellow")
+        if live_hosts:
+            msg.append(f"\n\nAlive hosts: {', '.join(live_hosts)}", style="dim")
+        msg.append(
+            "\nTip: Try scanning all ports with --all-ports or use nmap.",
+            style="bold cyan"
         )
-        print("However, the following hosts are alive: " + ", ".join(live_hosts))
-        print("Tip: Try scanning all ports with nmap if you still can't find it.")
+        console.print(
+            Panel(
+                msg,
+                title="[bold yellow]Scan Complete - No Matches[/bold yellow]",
+                border_style="yellow"
+            )
+        )
 
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print(Fore.RED + "\n[!] Interrupted by user." + Style.RESET_ALL)
+        print_error("Aborted", "Interrupted by user.")
         sys.exit(0)
     except PermissionError:
-        print(
-            Fore.RED
-            + "\n[!] PERMISSION ERROR: Access Denied."
-            + "\n    This tool requires Administrator privileges for network scanning."
-            + "\n    Please restart your terminal as Administrator."
-            + Style.RESET_ALL
+        print_error(
+            "Permission Denied",
+            "This tool requires Administrator privileges for network scanning.",
+            "Please restart your terminal as Administrator (sudo)."
         )
         sys.exit(1)
     except Exception as e:  # pylint: disable=broad-exception-caught
         if "--debug" in sys.argv:
             raise
-        print(
-            Fore.RED
-            + f"\n[!] Unexpected Error: {e}"
-            + "\n    Use --debug to see full traceback."
-            + Style.RESET_ALL
+        print_error(
+            "Unexpected Error",
+            f"{e}",
+            "Use --debug to see full traceback."
         )
         sys.exit(1)

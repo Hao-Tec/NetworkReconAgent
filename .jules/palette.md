@@ -1,3 +1,3 @@
-## 2024-05-24 - [Graceful Degradation over Hard Fails]
-**Learning:** The application was configured to crash immediately with a `PermissionError` when run without Admin privileges, despite claiming to support a fallback mode. This creates a hostile user experience ("you did it wrong") instead of a helpful one ("let me fix that for you"). Users expect tools to be resilient and do their best with available permissions.
-**Action:** Implement automatic fallbacks for privileged operations (like raw socket scanning) to unprivileged alternatives (like Ping/Connect), informing the user of the downgrade rather than exiting.
+## 2024-05-24 - [Standardized Error States]
+**Learning:** Users often miss critical error details (like "run as admin" or "install dependency") when they are buried in red text streams. Using a distinct UI component like a Panel for errors and empty states significantly improves scanning and actionability.
+**Action:** Always wrap actionable error states (permissions, dependencies, input errors) in a visual container (Panel) with clear "Title", "Message", and "Tip" sections to guide the user to the fix.
