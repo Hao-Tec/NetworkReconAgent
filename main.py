@@ -13,6 +13,7 @@ import asyncio
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.console import Console
 from rich.table import Table
+from rich.markup import escape
 from colorama import init, Fore, Style
 
 from scanner import (
@@ -133,12 +134,12 @@ def process_host(  # pylint: disable=too-many-arguments,R0917
 
         if status_type in ("FOUND", "FOUND_MATCH"):
             progress.console.print(
-                f"[bold green][SUCCESS] Found SERVICE at {url} "
+                f"[bold green][SUCCESS] Found SERVICE at {escape(url)} "
                 f"(Status: {status_code})[/bold green]"
             )
             if fingerprint:
                 progress.console.print(
-                    f"[magenta]          Detected: {fingerprint}[/magenta]"
+                    f"[magenta]          Detected: {escape(fingerprint)}[/magenta]"
                 )
             local_found.append((ip, port, url, status_code, fingerprint))
         elif status_type == "ROOT_ONLY":
@@ -148,7 +149,7 @@ def process_host(  # pylint: disable=too-many-arguments,R0917
             banner = BannerGrabber.identify_service(ip, port)
             if banner and "Unknown service" not in banner:
                 progress.console.print(
-                    f"[bold cyan][INFO] Found {banner} at {ip}:{port}[/bold cyan]"
+                    f"[bold cyan][INFO] Found {escape(banner)} at {ip}:{port}[/bold cyan]"
                 )
                 # Add to partial matches with banner info
                 local_partial.append((ip, port, f"{ip}:{port}", 0, banner))
@@ -190,12 +191,12 @@ async def async_process_host(  # pylint: disable=too-many-arguments,R0917,too-ma
 
             if status_type in ("FOUND", "FOUND_MATCH"):
                 progress.console.print(
-                    f"[bold green][SUCCESS] Found SERVICE at {url} "
+                    f"[bold green][SUCCESS] Found SERVICE at {escape(url)} "
                     f"(Status: {status_code})[/bold green]"
                 )
                 if fingerprint:
                     progress.console.print(
-                        f"[magenta]          Detected: {fingerprint}[/magenta]"
+                        f"[magenta]          Detected: {escape(fingerprint)}[/magenta]"
                     )
                 local_found.append((ip, port, url, status_code, fingerprint))
             elif status_type == "ROOT_ONLY":
@@ -208,13 +209,12 @@ async def async_process_host(  # pylint: disable=too-many-arguments,R0917,too-ma
                 )
                 if banner and "Unknown service" not in banner:
                     progress.console.print(
-                        f"[bold cyan][INFO] Found {banner} at {ip}:{port}[/bold cyan]"
+                        f"[bold cyan][INFO] Found {escape(banner)} at {ip}:{port}[/bold cyan]"
                     )
                     local_partial.append((ip, port, f"{ip}:{port}", 0, banner))
 
         progress.advance(scan_task)
         return local_found, local_partial
-
 
 
 def main() -> (
@@ -246,7 +246,7 @@ def main() -> (
         logging.basicConfig(
             filename=args.log_file,
             level=logging.DEBUG,
-            format='%(asctime)s - %(levelname)s - %(message)s'
+            format="%(asctime)s - %(levelname)s - %(message)s",
         )
         logging.info("Network Reconnaissance Agent started")
         logging.info("Arguments: %s", args)
@@ -302,7 +302,7 @@ def main() -> (
         network = ipaddress.ip_network(target_subnet, strict=False)
         total_hosts = sum(1 for _ in network.hosts())
     except ValueError:
-        total_hosts = 100 # Fallback estimate
+        total_hosts = 100  # Fallback estimate
 
     with Progress(
         SpinnerColumn(style="bold cyan"),
@@ -311,17 +311,18 @@ def main() -> (
         TextColumn("[bold cyan]{task.percentage:>3.0f}%"),
         transient=True,
     ) as progress:
-        task = progress.add_task(f"Discovering hosts in {target_subnet}...", total=total_hosts)
+        task = progress.add_task(
+            f"Discovering hosts in {target_subnet}...", total=total_hosts
+        )
 
         def advance_progress():
             progress.advance(task)
 
         def log_message(msg):
-            progress.console.print(f"[yellow]{msg}[/yellow]")
+            progress.console.print(f"[yellow]{escape(msg)}[/yellow]")
 
         live_hosts = discoverer.scan(
-            progress_callback=advance_progress,
-            message_callback=log_message
+            progress_callback=advance_progress, message_callback=log_message
         )
 
     if not live_hosts:
@@ -346,14 +347,16 @@ def main() -> (
 
     for host in live_hosts:
         mac_info = mac_scanner.get_mac_info(host)
-        host_table.add_row(host, mac_info or "-")
+        host_table.add_row(host, escape(mac_info) if mac_info else "-")
 
     console.print(host_table)
 
     # 2. Port Scanning & Service Verification
     ports_display = str(target_ports)
     if len(target_ports) > 15:
-        ports_display = f"[{target_ports[0]}...{target_ports[-1]}] ({len(target_ports)} ports)"
+        ports_display = (
+            f"[{target_ports[0]}...{target_ports[-1]}] ({len(target_ports)} ports)"
+        )
 
     print(
         "\n"
@@ -368,7 +371,9 @@ def main() -> (
     if args.use_async:
         verifier = AsyncServiceVerifier(args.path, timeout=args.timeout)
     else:
-        verifier = ServiceVerifier(args.path, timeout=args.timeout, retries=args.retries)
+        verifier = ServiceVerifier(
+            args.path, timeout=args.timeout, retries=args.retries
+        )
 
     found_services = []
     partial_matches = []
@@ -418,7 +423,13 @@ def main() -> (
             async def scan_all_async():
                 tasks = [
                     async_process_host(
-                        ip, scanner, verifier, common_paths, progress, scan_task, semaphore
+                        ip,
+                        scanner,
+                        verifier,
+                        common_paths,
+                        progress,
+                        scan_task,
+                        semaphore,
                     )
                     for ip in live_hosts
                 ]
@@ -436,7 +447,9 @@ def main() -> (
                     partial_matches.extend(partial)
         else:
             # Sync mode - traditional threading
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=max_workers
+            ) as executor:
                 future_to_ip = {
                     executor.submit(
                         process_host,
@@ -471,7 +484,7 @@ def main() -> (
         table.add_column("Technology", style="magenta")
 
         for ip, port, url, status, fp in found_services:
-            table.add_row(url, str(status), fp)
+            table.add_row(escape(url), str(status), escape(fp) if fp else "")
 
         console.print(table)
 
@@ -485,7 +498,8 @@ def main() -> (
         table.add_column("Technology", style="magenta")
 
         for ip, port, url, status, fp in partial_matches:
-            table.add_row(url, str(status), f"{fp} (Root path works)")
+            escaped_fp = escape(fp) if fp else ""
+            table.add_row(escape(url), str(status), f"{escaped_fp} (Root path works)")
 
         console.print(table)
 
@@ -497,28 +511,27 @@ def main() -> (
             hosts_map[h] = {
                 "ip": h,
                 "mac": mac_scanner.get_mac_info(h) or "Unknown",
-                "services": []
+                "services": [],
             }
 
         # 2. Add services
         all_findings = found_services + partial_matches
         for ip, port, url, status, fp in all_findings:
             if ip in hosts_map:
-                hosts_map[ip]["services"].append({
-                    "port": port,
-                    "url": url,
-                    "status": status,
-                    "fingerprint": fp
-                })
+                hosts_map[ip]["services"].append(
+                    {"port": port, "url": url, "status": status, "fingerprint": fp}
+                )
 
         # 3. Build final data structure
         report_data = {
             "scan_info": {
                 "subnet": target_subnet,
-                "ports": str(target_ports) if len(target_ports) < 20 else "Range/Large List",
-                "target_path": args.path
+                "ports": (
+                    str(target_ports) if len(target_ports) < 20 else "Range/Large List"
+                ),
+                "target_path": args.path,
             },
-            "hosts": list(hosts_map.values())
+            "hosts": list(hosts_map.values()),
         }
 
         save_report(report_data, args.output)
