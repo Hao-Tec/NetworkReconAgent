@@ -28,12 +28,14 @@
 ### v2.4.0 ULTIMATE Updates
 
 #### 🚀 **Speed Revolution**
+
 - **Async I/O Mode**: Use `--async` for 20-50x faster scans (powered by `aiohttp`)
 - **Connection Pooling**: Reuses TCP connections for 3-5x HTTP performance boost
 - **Smart Retry Logic**: Exponential backoff (0.5s → 1s → 2s) for transient failures
 - **Configurable Concurrency**: `--max-workers` to tune for your network (default: 20)
 
 #### 🔌 **Multi-Protocol Service Detection**
+
 - **SSH** (port 22): Banner grabbing with version detection
 - **FTP** (port 21): Service identification
 - **MySQL/MariaDB** (3306, 3307): Protocol handshake parsing + version extraction
@@ -45,11 +47,13 @@
 - **+11 more protocols** with intelligent fallback
 
 #### 📊 **Professional Reporting**
+
 - **JSON Export**: `--output results.json` for machine-readable data
 - **CSV Export**: `--output scan.csv` for Excel/spreadsheet import
 - **Structured Data**: Host info, MAC addresses, services, ports, fingerprints
 
 #### 🛠️ **Advanced Configuration**
+
 - **Custom Timeouts**: `--timeout <seconds>` for slow networks (default: 3s)
 - **Retry Control**: `--retries <N>` adjustable failure recovery (default: 3)
 - **Debug Logging**: `--log-file scan.log` for troubleshooting
@@ -83,6 +87,7 @@ pip install -r requirements.txt
 ```
 
 **Dependencies:**
+
 - `requests` - HTTP client with retry support
 - `rich` - Terminal UI and progress bars
 - `colorama` - Cross-platform colored output
@@ -95,12 +100,14 @@ pip install -r requirements.txt
 > ⚠️ **Requires Administrator/Root privileges**
 
 **Windows:**
+
 ```bash
 pip install scapy
 # Run PowerShell/CMD as Administrator
 ```
 
 **Linux/macOS:**
+
 ```bash
 sudo pip install scapy
 sudo python main.py
@@ -178,19 +185,19 @@ python main.py --async \
 
 ## 📋 Command-Line Arguments
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `--subnet <CIDR>` | Target subnet (e.g., `192.168.0.0/24`) | Auto-detected |
-| `--ports <LIST>` | Ports to scan (e.g., `80,443` or `100-200`) | `80,443,8080,8000,8888,3000,5000,8443,9000` |
-| `--all-ports` | Scan all ports (1-65535) ⚠️ Very slow | Disabled |
-| `--path <PATH>` | URL path to check (e.g., `/moodle/`) | `/moodle/` |
-| `--async` | **Enable async I/O (20-50x faster)** | Disabled |
-| `--timeout <SEC>` | HTTP request timeout in seconds | `3` |
-| `--retries <N>` | Number of retry attempts for failed requests | `3` |
-| `--max-workers <N>` | Maximum concurrent workers | `20` |
-| `--output <FILE>` | Save report (`.json` or `.csv`) | None |
-| `--log-file <PATH>` | Debug log file path | None |
-| `--debug` | Show full error tracebacks | Disabled |
+| Argument            | Description                                  | Default                                     |
+| ------------------- | -------------------------------------------- | ------------------------------------------- |
+| `--subnet <CIDR>`   | Target subnet (e.g., `192.168.0.0/24`)       | Auto-detected                               |
+| `--ports <LIST>`    | Ports to scan (e.g., `80,443` or `100-200`)  | `80,443,8080,8000,8888,3000,5000,8443,9000` |
+| `--all-ports`       | Scan all ports (1-65535) ⚠️ Very slow        | Disabled                                    |
+| `--path <PATH>`     | URL path to check (e.g., `/moodle/`)         | `/moodle/`                                  |
+| `--async`           | **Enable async I/O (20-50x faster)**         | Disabled                                    |
+| `--timeout <SEC>`   | HTTP request timeout in seconds              | `3`                                         |
+| `--retries <N>`     | Number of retry attempts for failed requests | `3`                                         |
+| `--max-workers <N>` | Maximum concurrent workers                   | `20`                                        |
+| `--output <FILE>`   | Save report (`.json` or `.csv`)              | None                                        |
+| `--log-file <PATH>` | Debug log file path                          | None                                        |
+| `--debug`           | Show full error tracebacks                   | Disabled                                    |
 
 ---
 
@@ -265,9 +272,10 @@ NetworkReconAgent/
 ```
 
 **Scanning Flow:**
+
 1. **Host Discovery**: ARP scan (or Ping fallback) finds live hosts
 2. **Port Scanning**: TCP connect to detect open ports
-3. **Service Verification**: 
+3. **Service Verification**:
    - Try HTTP/HTTPS first (web services)
    - Fall back to banner grabbing (SSH, MySQL, etc.)
 4. **Fingerprinting**: Extract versions, CMS, technologies
@@ -280,12 +288,14 @@ NetworkReconAgent/
 > ⚠️ **DISCLAIMER**: This tool is for **authorized testing only**. Unauthorized network scanning may be illegal in your jurisdiction.
 
 **Responsible Use:**
+
 - ✅ Only scan networks you own or have written permission to test
 - ✅ Respect rate limits and avoid DoS conditions
 - ✅ Follow your organization's security policies
 - ✅ Use `--max-workers` conservatively on production networks
 
 **This tool is designed for:**
+
 - Internal security audits
 - Penetration testing engagements
 - Network inventory management
@@ -301,6 +311,7 @@ NetworkReconAgent/
 **Cause**: ARP scanning requires administrator privileges.
 
 **Solution**:
+
 - **Windows**: Run PowerShell/CMD as Administrator
 - **Linux/macOS**: Use `sudo python main.py`
 - **Alternative**: Tool will automatically fall back to Ping (slower but no admin needed)
@@ -310,6 +321,7 @@ NetworkReconAgent/
 **Cause**: `aiohttp` not installed.
 
 **Solution**:
+
 ```bash
 pip install aiohttp
 ```
@@ -317,6 +329,7 @@ pip install aiohttp
 ### Slow Scanning Speed
 
 **Solutions**:
+
 1. **Enable async mode**: `--async` (20-50x faster)
 2. **Increase workers**: `--max-workers 50`
 3. **Reduce timeout**: `--timeout 2` (risky for slow networks)
@@ -327,10 +340,12 @@ pip install aiohttp
 **Issue**: Tool reports services that don't exist.
 
 **Causes**:
+
 - Firewalls returning generic "200 OK" for any URL
 - Captive portals (hotel WiFi, corporate networks)
 
 **Solutions**:
+
 - Tool has built-in wildcard detection
 - Check "partial matches" table for root-only responses
 - Use `--debug` to see HTTP responses
@@ -341,12 +356,12 @@ pip install aiohttp
 
 **Test Environment**: 192.168.10.0/24 (254 possible hosts), 12 live hosts, 9 common ports
 
-| Mode | Time | Speedup |
-|------|------|---------|
-| **Sync (default)** | 8m 42s | 1x |
-| Sync + 50 workers | 5m 18s | 1.6x |
-| **Async (default)** | 22s | **23.7x** ⚡ |
-| Async + 100 workers | 18s | 29x |
+| Mode                | Time   | Speedup      |
+| ------------------- | ------ | ------------ |
+| **Sync (default)**  | 8m 42s | 1x           |
+| Sync + 50 workers   | 5m 18s | 1.6x         |
+| **Async (default)** | 22s    | **23.7x** ⚡ |
+| Async + 100 workers | 18s    | 29x          |
 
 > 💡 **Tip**: For large networks (`/16` or bigger), async mode is **essential**.
 
@@ -355,12 +370,14 @@ pip install aiohttp
 ## 🔮 Roadmap (Future Versions)
 
 ### v2.5.0 (Planned)
+
 - 📊 HTML report generation with interactive charts
 - 💾 Save/Resume functionality for large scans
 - 🎨 Interactive TUI dashboard
 - 🔍 Passive network monitoring mode
 
 ### v3.0.0 (Vision)
+
 - 🌐 Distributed scanning (multiple agents)
 - 🗄️ Database backend for historical data
 - 🔌 Plugin system for custom protocol detectors
@@ -371,6 +388,7 @@ pip install aiohttp
 ## 🤝 Contributing
 
 Contributions are welcome! Please:
+
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
@@ -378,6 +396,7 @@ Contributions are welcome! Please:
 5. Open a Pull Request
 
 **Coding Standards:**
+
 - Maintain 10/10 Pylint score
 - Add docstrings to new functions
 - Update README for new features
@@ -402,7 +421,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 📞 Contact
 
-**Author**: The TECHMASTER  
+**Author**: AbdulWaheed Habeeb  
 **GitHub**: [@Hao-Tec](https://github.com/Hao-Tec)  
 **Repository**: [NetworkReconAgent](https://github.com/Hao-Tec/NetworkReconAgent)
 
