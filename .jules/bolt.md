@@ -1,4 +1,4 @@
-## 2025-01-20 - Connection Reuse in ServiceVerifier
+## 2025-01-20 - Cache Key Granularity and Object Creation
 
-**Learning:** `requests.get()` creates a new TCP connection for every call, which incurs significant overhead (DNS + TCP Handshake + SSL Handshake) when checking multiple paths on the same host.
-**Action:** Always use `requests.Session()` when making multiple requests to the same host/domain to enable Keep-Alive and connection pooling. This is a low-effort, high-impact optimization for network scanning tools.
+**Learning:** `functools.lru_cache` is ineffective if the cache key is too specific (e.g., full MAC address instead of OUI prefix), leading to frequent misses and redundant computation. Additionally, defining large constant dictionaries inside a function body causes them to be recreated on every execution (cache miss), adding significant overhead.
+**Action:** Move constant data structures to module level. Ensure cache keys are normalized or truncated to the minimum specificity required for the lookup (e.g., use OUI prefix instead of full MAC).
