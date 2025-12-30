@@ -42,6 +42,18 @@ except Exception:  # pylint: disable=broad-exception-caught
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
+def _clean_text(text: str) -> str:
+    """
+    Removes ANSI escape codes and other non-printable characters from text
+    to prevent terminal injection and log corruption.
+    """
+    if not text:
+        return ""
+    # ANSI escape code regex
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\-_]|\[[0-?]*[ -/]*[@-~])')
+    return ansi_escape.sub('', text)
+
+
 @functools.lru_cache(maxsize=512)
 def _get_vendor_from_mac(mac_prefix: str) -> str:
     """
@@ -425,12 +437,12 @@ def _fingerprint_web_response(headers: dict, text: str) -> str:
     # 1. Server header
     server = headers_lower.get("server", "")
     if server:
-        hints.append(server)
+        hints.append(_clean_text(server))
 
     # 2. Powered-By Header
     powered_by = headers_lower.get("x-powered-by", "")
     if powered_by:
-        hints.append(powered_by)
+        hints.append(_clean_text(powered_by))
 
     # Limit text to first 5KB for performance
     text = text[:5000] if text else ""
@@ -440,7 +452,7 @@ def _fingerprint_web_response(headers: dict, text: str) -> str:
     if "moodle" in text.lower() or "course/view.php" in text:
         version_match = re.search(r'content="Moodle ([0-9.]+)"', text, re.IGNORECASE)
         if version_match:
-            hints.append(f"Moodle {version_match.group(1)}")
+            hints.append(f"Moodle {_clean_text(version_match.group(1))}")
         else:
             hints.append("Moodle")
 
@@ -460,7 +472,7 @@ def _fingerprint_web_response(headers: dict, text: str) -> str:
     title_match = re.search(r"<title>(.*?)</title>", text, re.IGNORECASE)
     if title_match:
         title = title_match.group(1).strip()[:40]  # Cap length
-        hints.append(f"Title: {title}")
+        hints.append(f"Title: {_clean_text(title)}")
 
     return ", ".join(hints) if hints else "Generic Web Server"
 
@@ -994,11 +1006,11 @@ class BannerGrabber:  # pylint: disable=too-few-public-methods
                 if port == 22:  # SSH
                     # SSH servers send banner immediately
                     banner = sock.recv(1024).decode("utf-8", errors="ignore").strip()
-                    return f"SSH: {banner}"
+                    return f"SSH: {_clean_text(banner)}"
 
                 if port == 21:  # FTP
                     banner = sock.recv(1024).decode("utf-8", errors="ignore").strip()
-                    return f"FTP: {banner}"
+                    return f"FTP: {_clean_text(banner)}"
 
                 if port in (3306, 3307):  # MySQL/MariaDB
                     # MySQL sends handshake immediately
@@ -1011,7 +1023,7 @@ class BannerGrabber:  # pylint: disable=too-few-public-methods
                                 version = data[5:version_end].decode(
                                     "utf-8", errors="ignore"
                                 )
-                                return f"MySQL/MariaDB: {version}"
+                                return f"MySQL/MariaDB: {_clean_text(version)}"
                     except (ValueError, UnicodeDecodeError):
                         pass
                     return "MySQL/MariaDB (Detected)"
@@ -1027,7 +1039,7 @@ class BannerGrabber:  # pylint: disable=too-few-public-methods
                         for line in response.split("\n"):
                             if line.startswith("redis_version:"):
                                 version = line.split(":")[1].strip()
-                                return f"Redis: {version}"
+                                return f"Redis: {_clean_text(version)}"
                     return "Redis (Detected)"
 
                 if port == 27017:  # MongoDB
@@ -1039,14 +1051,14 @@ class BannerGrabber:  # pylint: disable=too-few-public-methods
                 if port == 5672:  # RabbitMQ
                     banner = sock.recv(1024).decode("utf-8", errors="ignore")
                     if "AMQP" in banner:
-                        return f"RabbitMQ: {banner.strip()}"
+                        return f"RabbitMQ: {_clean_text(banner.strip())}"
                     return "RabbitMQ (Detected)"
 
                 # Generic banner grab - just read what server sends
                 sock.sendall(b"\r\n")
                 banner = sock.recv(1024).decode("utf-8", errors="ignore").strip()
                 if banner:
-                    return banner[:100]  # Truncate long banners
+                    return _clean_text(banner[:100])  # Truncate long banners
 
         except (socket.timeout, socket.error, OSError, UnicodeDecodeError):
             pass
