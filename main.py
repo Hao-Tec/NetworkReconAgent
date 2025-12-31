@@ -102,6 +102,11 @@ def parse_args() -> argparse.Namespace:
         dest="use_async",
         help="Use async I/O for 10-50x speed improvement (requires aiohttp).",
     )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress the startup banner and matrix rain effect.",
+    )
     return parser.parse_args()
 
 
@@ -255,7 +260,8 @@ def main() -> (
 
     # Move banner here so debug args are parsed first (though banner is safe)
     # Actually, we can just print banner after parsing args, but parsing args is fast.
-    print_banner()
+    if not args.quiet:
+        print_banner()
 
     # Parse ports
     target_ports = []
