@@ -42,6 +42,17 @@ except Exception:  # pylint: disable=broad-exception-caught
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
+def _clean_text(text: str) -> str:
+    """
+    Sanitizes text to prevent Terminal Injection (ANSI escape codes).
+    """
+    if not text:
+        return ""
+    # Strip ANSI escape codes
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\-_]|\[[0-?]*[ -/]*[@-~])')
+    return ansi_escape.sub('', text)
+
+
 @functools.lru_cache(maxsize=512)
 def _get_vendor_from_mac(mac_prefix: str) -> str:
     """
@@ -433,7 +444,7 @@ def _fingerprint_web_response(headers: dict, text: str) -> str:
         hints.append(powered_by)
 
     # Limit text to first 5KB for performance
-    text = text[:5000] if text else ""
+    text = _clean_text(text[:5000]) if text else ""
 
     # CMS Detection
     # Moodle
@@ -462,7 +473,8 @@ def _fingerprint_web_response(headers: dict, text: str) -> str:
         title = title_match.group(1).strip()[:40]  # Cap length
         hints.append(f"Title: {title}")
 
-    return ", ".join(hints) if hints else "Generic Web Server"
+    # Final sanitization of all hints just in case
+    return ", ".join([_clean_text(h) for h in hints]) if hints else "Generic Web Server"
 
 
 def get_local_network() -> str:
@@ -994,11 +1006,11 @@ class BannerGrabber:  # pylint: disable=too-few-public-methods
                 if port == 22:  # SSH
                     # SSH servers send banner immediately
                     banner = sock.recv(1024).decode("utf-8", errors="ignore").strip()
-                    return f"SSH: {banner}"
+                    return f"SSH: {_clean_text(banner)}"
 
                 if port == 21:  # FTP
                     banner = sock.recv(1024).decode("utf-8", errors="ignore").strip()
-                    return f"FTP: {banner}"
+                    return f"FTP: {_clean_text(banner)}"
 
                 if port in (3306, 3307):  # MySQL/MariaDB
                     # MySQL sends handshake immediately
@@ -1039,14 +1051,14 @@ class BannerGrabber:  # pylint: disable=too-few-public-methods
                 if port == 5672:  # RabbitMQ
                     banner = sock.recv(1024).decode("utf-8", errors="ignore")
                     if "AMQP" in banner:
-                        return f"RabbitMQ: {banner.strip()}"
+                        return f"RabbitMQ: {_clean_text(banner.strip())}"
                     return "RabbitMQ (Detected)"
 
                 # Generic banner grab - just read what server sends
                 sock.sendall(b"\r\n")
                 banner = sock.recv(1024).decode("utf-8", errors="ignore").strip()
                 if banner:
-                    return banner[:100]  # Truncate long banners
+                    return _clean_text(banner[:100])  # Truncate long banners
 
         except (socket.timeout, socket.error, OSError, UnicodeDecodeError):
             pass
