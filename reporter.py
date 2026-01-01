@@ -40,8 +40,10 @@ def _sanitize_csv_cell(cell_data: Any) -> Any:
     """
     Sanitizes data to prevent CSV Injection (Formula Injection).
     Prepends a single quote if the data starts with =, +, -, or @.
+    Also handles values that might contain injection characters.
     """
     if isinstance(cell_data, str):
+        # Check if it starts with injection characters
         if cell_data.startswith(("=", "+", "-", "@")):
             return f"'{cell_data}"
     return cell_data
@@ -63,10 +65,10 @@ def _save_csv(data: Dict[str, Any], filename: str) -> None:
             if services:
                 for svc in services:
                     flat_rows.append({
-                        "ip": ip,
-                        "mac": mac,
+                        "ip": _sanitize_csv_cell(ip),
+                        "mac": _sanitize_csv_cell(mac),
                         "port": svc.get("port"),
-                        "url": svc.get("url"),
+                        "url": _sanitize_csv_cell(svc.get("url")),
                         "status": svc.get("status"),
                         "fingerprint": _sanitize_csv_cell(svc.get("fingerprint")),
                         "type": "Web Service"
@@ -74,8 +76,8 @@ def _save_csv(data: Dict[str, Any], filename: str) -> None:
             else:
                 # Just the host info
                 flat_rows.append({
-                    "ip": ip,
-                    "mac": mac,
+                    "ip": _sanitize_csv_cell(ip),
+                    "mac": _sanitize_csv_cell(mac),
                     "port": "",
                     "url": "",
                     "status": "",
