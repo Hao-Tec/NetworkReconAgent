@@ -42,6 +42,13 @@ except Exception:  # pylint: disable=broad-exception-caught
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
+# Pre-compile regex patterns for performance
+RE_ARP_WINDOWS = re.compile(r"(\d+\.\d+\.\d+\.\d+)\s+([\da-fA-F\-]{17})")
+RE_ARP_POSIX = re.compile(r"(\d+\.\d+\.\d+\.\d+)\s+.*?([\da-fA-F:]{17})")
+RE_MOODLE_VERSION = re.compile(r'content="Moodle ([0-9.]+)"', re.IGNORECASE)
+RE_HTML_TITLE = re.compile(r"<title>(.*?)</title>", re.IGNORECASE)
+
+
 @functools.lru_cache(maxsize=512)
 def _get_vendor_from_mac(mac_prefix: str) -> str:
     """
@@ -438,7 +445,7 @@ def _fingerprint_web_response(headers: dict, text: str) -> str:
     # CMS Detection
     # Moodle
     if "moodle" in text.lower() or "course/view.php" in text:
-        version_match = re.search(r'content="Moodle ([0-9.]+)"', text, re.IGNORECASE)
+        version_match = RE_MOODLE_VERSION.search(text)
         if version_match:
             hints.append(f"Moodle {version_match.group(1)}")
         else:
@@ -457,7 +464,7 @@ def _fingerprint_web_response(headers: dict, text: str) -> str:
         hints.append("Blackboard")
 
     # 3. HTML Title
-    title_match = re.search(r"<title>(.*?)</title>", text, re.IGNORECASE)
+    title_match = RE_HTML_TITLE.search(text)
     if title_match:
         title = title_match.group(1).strip()[:40]  # Cap length
         hints.append(f"Title: {title}")
@@ -635,9 +642,7 @@ class MacScanner:  # pylint: disable=too-few-public-methods
                 # Parse Windows ARP output
                 # Example: 192.168.1.1          00-11-22-33-44-55     dynamic
                 for line in result.stdout.splitlines():
-                    match = re.search(
-                        r"(\d+\.\d+\.\d+\.\d+)\s+([\da-fA-F\-]{17})", line
-                    )
+                    match = RE_ARP_WINDOWS.search(line)
                     if match:
                         ip = match.group(1)
                         mac = match.group(2).replace("-", ":").upper()
@@ -654,9 +659,7 @@ class MacScanner:  # pylint: disable=too-few-public-methods
                 # Parse Linux/Mac ARP output
                 # Example: 192.168.1.1  ether   00:11:22:33:44:55   C   eth0
                 for line in result.stdout.splitlines():
-                    match = re.search(
-                        r"(\d+\.\d+\.\d+\.\d+)\s+.*?([\da-fA-F:]{17})", line
-                    )
+                    match = RE_ARP_POSIX.search(line)
                     if match:
                         ip = match.group(1)
                         mac = match.group(2).replace("-", ":").upper()
