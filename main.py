@@ -562,13 +562,35 @@ if __name__ == "__main__":
         print(Fore.RED + "\n[!] Interrupted by user." + Style.RESET_ALL)
         sys.exit(0)
     except PermissionError:
-        print(
-            Fore.RED
-            + "\n[!] PERMISSION ERROR: Access Denied."
-            + "\n    This tool requires Administrator privileges for network scanning."
-            + "\n    Please restart your terminal as Administrator."
-            + Style.RESET_ALL
-        )
+        import platform
+        import shlex
+
+        system = platform.system()
+        is_windows = system == "Windows"
+
+        permission_msg = Text()
+        permission_msg.append("Access Denied: Permission Error\n\n", style="bold red")
+        permission_msg.append("Network scanning requires elevated privileges.\n", style="yellow")
+
+        if is_windows:
+            permission_msg.append("Please right-click your terminal and select ", style="cyan")
+            permission_msg.append("'Run as Administrator'", style="bold white on blue")
+        else:
+            # Reconstruct command safely
+            # sys.executable is the python interpreter.
+            # sys.argv is ['main.py', '--arg', 'val']
+            # So `sudo python3 main.py --arg val` is what we want.
+            safe_args = [shlex.quote(arg) for arg in sys.argv]
+            # If sys.argv[0] is just 'main.py', we might want to prepend python executable
+            # but usually just sudo + args is what the user typed if it was executable.
+            # However, safer to suggest: sudo python3 main.py ...
+
+            safe_command = f"sudo {sys.executable} " + " ".join(safe_args)
+
+            permission_msg.append("Please run with sudo:\n\n", style="cyan")
+            permission_msg.append(f"  {safe_command}", style="bold green")
+
+        console.print(Panel(permission_msg, title="PERMISSION ERROR", border_style="red"))
         sys.exit(1)
     except Exception as e:  # pylint: disable=broad-exception-caught
         if "--debug" in sys.argv:
