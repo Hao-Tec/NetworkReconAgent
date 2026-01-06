@@ -115,6 +115,11 @@ def parse_args() -> argparse.Namespace:
         dest="use_async",
         help="Use async I/O for 10-50x speed improvement (requires aiohttp).",
     )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress banner and startup animations.",
+    )
     return parser.parse_args()
 
 
@@ -268,7 +273,8 @@ def main() -> (
 
     # Move banner here so debug args are parsed first (though banner is safe)
     # Actually, we can just print banner after parsing args, but parsing args is fast.
-    print_banner()
+    if not args.quiet:
+        print_banner()
 
     # Parse ports
     target_ports = []
@@ -557,9 +563,21 @@ def main() -> (
             f"No web services found matching path '{args.path}'.\n\n", style="bold red"
         )
         no_results_text.append(
-            "However, the following hosts are alive:\n", style="yellow"
+            f"However, {len(live_hosts)} hosts are alive:\n", style="yellow"
         )
-        no_results_text.append(", ".join(live_hosts) + "\n\n", style="green")
+
+        # Truncate host list if too long to prevent screen flooding
+        display_limit = 50
+        if len(live_hosts) > display_limit:
+            display_hosts = live_hosts[:display_limit]
+            hidden_count = len(live_hosts) - display_limit
+            no_results_text.append(", ".join(display_hosts), style="green")
+            no_results_text.append(
+                f"\n...and {hidden_count} more hosts.\n\n", style="dim green"
+            )
+        else:
+            no_results_text.append(", ".join(live_hosts) + "\n\n", style="green")
+
         no_results_text.append(
             "Tip: Try scanning all ports with --all-ports if you still can't find it.",
             style="italic cyan",

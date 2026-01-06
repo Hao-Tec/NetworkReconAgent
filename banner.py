@@ -24,13 +24,14 @@ from rich.layout import Layout
 from rich.live import Live
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.align import Align
-from rich.spinner import Spinner
+from rich.spinner import Spinner, SPINNERS
 
 console = Console(force_terminal=True, legacy_windows=False)
 
-# Custom block spinner using more universal Unicode characters
-BLOCK_SPINNER = Spinner(
-    [
+# Register custom spinner
+SPINNERS["custom_block"] = {
+    "interval": 80,
+    "frames": [
         "█▒▒▒▒▒▒",
         "██▒▒▒▒▒",
         "███▒▒▒▒",
@@ -46,8 +47,10 @@ BLOCK_SPINNER = Spinner(
         "▒▒▒▒▒▒█",
         "▒▒▒▒▒▒▒",
     ],
-    speed=1.0,
-)
+}
+
+# Custom block spinner using more universal Unicode characters
+BLOCK_SPINNER = Spinner("custom_block", speed=1.0)
 
 def matrix_rain(duration=3.0):
     """
@@ -129,7 +132,8 @@ def system_breach_sequence():
     time.sleep(0.5)
 
     with Progress(
-        SpinnerColumn(BLOCK_SPINNER, style="bold cyan"),
+        # Use the name string, not the object
+        SpinnerColumn("custom_block", style="bold cyan"),
         TextColumn("[bold cyan]{task.description}"),
         BarColumn(bar_width=None, style="cyan dim", complete_style="bold cyan"),
         TextColumn("[bold cyan]{task.percentage:>3.0f}%"),
@@ -158,7 +162,7 @@ def print_banner():
     # 2. Main Banner
     network_lines = [
         r"███╗   ██╗███████╗████████╗██╗    ██╗ ██████╗ ██████╗ ██╗  ██╗",
-        r"████╗  ██║██╔════╝╚══██╔══╝██║    ██║██╔═══██╗██╔══██╗██║ ██╔╝",
+        r"████╗  ██║██╔════╝╚══██╔══╝██║    ██║██╔══██╗██╔══██╗██║ ██╔╝",
         r"██╔██╗ ██║█████╗     ██║   ██║ █╗ ██║██║   ██║██████╔╝█████╔╝ ",
         r"██║╚██╗██║██╔══╝     ██║   ██║███╗██║██║   ██║██╔══██╗██╔═██╗ ",
         r"██║ ╚████║███████╗   ██║   ╚███╔███╔╝╚██████╔╝██║  ██║██║  ██╗",
