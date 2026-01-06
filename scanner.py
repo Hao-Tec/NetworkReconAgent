@@ -42,6 +42,21 @@ except Exception:  # pylint: disable=broad-exception-caught
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
+def _strip_ansi(text: str) -> str:
+    """
+    Strips ANSI escape sequences and control characters from text to prevent
+    terminal injection and log spoofing.
+    """
+    if not text:
+        return ""
+    # Regex to remove ANSI escape codes (CSI, OSC, etc.)
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    text = ansi_escape.sub('', text)
+    # Also remove common control characters that can mess up terminal lines
+    # \r = carriage return (overwrite line), \b = backspace
+    return text.replace('\r', '').replace('\b', '')
+
+
 @functools.lru_cache(maxsize=512)
 def _get_vendor_from_mac(mac_prefix: str) -> str:
     """
@@ -425,12 +440,12 @@ def _fingerprint_web_response(headers: dict, text: str) -> str:
     # 1. Server header
     server = headers_lower.get("server", "")
     if server:
-        hints.append(server)
+        hints.append(_strip_ansi(server))
 
     # 2. Powered-By Header
     powered_by = headers_lower.get("x-powered-by", "")
     if powered_by:
-        hints.append(powered_by)
+        hints.append(_strip_ansi(powered_by))
 
     # Limit text to first 5KB for performance
     text = text[:5000] if text else ""
@@ -460,7 +475,7 @@ def _fingerprint_web_response(headers: dict, text: str) -> str:
     title_match = re.search(r"<title>(.*?)</title>", text, re.IGNORECASE)
     if title_match:
         title = title_match.group(1).strip()[:40]  # Cap length
-        hints.append(f"Title: {title}")
+        hints.append(f"Title: {_strip_ansi(title)}")
 
     return ", ".join(hints) if hints else "Generic Web Server"
 
@@ -1062,7 +1077,7 @@ class BannerGrabber:  # pylint: disable=too-few-public-methods
         banner = BannerGrabber.grab_banner(ip, port)
 
         if banner:
-            return banner
+            return _strip_ansi(banner)
 
         # Fallback to port-based identification if no banner
         common_ports = {
