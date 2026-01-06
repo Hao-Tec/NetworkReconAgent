@@ -4,8 +4,21 @@ Provides a simple command line interface to discover hosts,
 scan ports and verify presence of web services.
 """
 
-import argparse
+import os
 import sys
+
+# Force UTF-8 encoding on Windows to fix Unicode rendering in Admin terminals
+if sys.platform == "win32":
+    # Set console code page to UTF-8
+    os.system("chcp 65001 > nul 2>&1")
+    # Set Python's stdout/stderr to UTF-8
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+
+# pylint: disable=wrong-import-position
+import argparse
 import concurrent.futures
 import ipaddress
 import logging
