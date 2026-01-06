@@ -24,9 +24,30 @@ from rich.layout import Layout
 from rich.live import Live
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.align import Align
+from rich.spinner import Spinner
 
 console = Console(force_terminal=True, legacy_windows=False)
 
+# Custom block spinner using more universal Unicode characters
+BLOCK_SPINNER = Spinner(
+    [
+        "█▒▒▒▒▒▒",
+        "██▒▒▒▒▒",
+        "███▒▒▒▒",
+        "████▒▒▒",
+        "█████▒▒",
+        "██████▒",
+        "███████",
+        "▒██████",
+        "▒▒█████",
+        "▒▒▒████",
+        "▒▒▒▒███",
+        "▒▒▒▒▒██",
+        "▒▒▒▒▒▒█",
+        "▒▒▒▒▒▒▒",
+    ],
+    speed=1.0,
+)
 
 def matrix_rain(duration=3.0):
     """
@@ -108,7 +129,7 @@ def system_breach_sequence():
     time.sleep(0.5)
 
     with Progress(
-        SpinnerColumn("aesthetic", style="bold cyan"),
+        SpinnerColumn(BLOCK_SPINNER, style="bold cyan"),
         TextColumn("[bold cyan]{task.description}"),
         BarColumn(bar_width=None, style="cyan dim", complete_style="bold cyan"),
         TextColumn("[bold cyan]{task.percentage:>3.0f}%"),
