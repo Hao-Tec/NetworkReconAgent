@@ -3,8 +3,20 @@
 Module for displaying the startup banner.
 """
 
+import os
+import sys
 import time
 import random
+
+# Force UTF-8 encoding on Windows for Admin terminal Unicode support
+if sys.platform == "win32":
+    os.system("chcp 65001 > nul 2>&1")
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+
+# pylint: disable=wrong-import-position
 from rich.console import Console
 from rich.text import Text
 from rich.panel import Panel
@@ -13,7 +25,7 @@ from rich.live import Live
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.align import Align
 
-console = Console(force_terminal=True)
+console = Console(force_terminal=True, legacy_windows=False)
 
 
 def matrix_rain(duration=3.0):
