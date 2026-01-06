@@ -42,6 +42,17 @@ except Exception:  # pylint: disable=broad-exception-caught
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
+# Regex for ANSI escape codes
+RE_ANSI_ESCAPE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+
+
+def _strip_ansi(text: str) -> str:
+    """Strips ANSI escape codes from text to prevent terminal injection."""
+    if not text:
+        return ""
+    return RE_ANSI_ESCAPE.sub("", text)
+
+
 @functools.lru_cache(maxsize=512)
 def _get_vendor_from_mac(mac_prefix: str) -> str:
     """
@@ -425,12 +436,12 @@ def _fingerprint_web_response(headers: dict, text: str) -> str:
     # 1. Server header
     server = headers_lower.get("server", "")
     if server:
-        hints.append(server)
+        hints.append(_strip_ansi(server))
 
     # 2. Powered-By Header
     powered_by = headers_lower.get("x-powered-by", "")
     if powered_by:
-        hints.append(powered_by)
+        hints.append(_strip_ansi(powered_by))
 
     # Limit text to first 5KB for performance
     text = text[:5000] if text else ""
@@ -460,7 +471,7 @@ def _fingerprint_web_response(headers: dict, text: str) -> str:
     title_match = re.search(r"<title>(.*?)</title>", text, re.IGNORECASE)
     if title_match:
         title = title_match.group(1).strip()[:40]  # Cap length
-        hints.append(f"Title: {title}")
+        hints.append(f"Title: {_strip_ansi(title)}")
 
     return ", ".join(hints) if hints else "Generic Web Server"
 
@@ -1046,7 +1057,7 @@ class BannerGrabber:  # pylint: disable=too-few-public-methods
                 sock.sendall(b"\r\n")
                 banner = sock.recv(1024).decode("utf-8", errors="ignore").strip()
                 if banner:
-                    return banner[:100]  # Truncate long banners
+                    return _strip_ansi(banner)[:100]  # Truncate long banners
 
         except (socket.timeout, socket.error, OSError, UnicodeDecodeError):
             pass
