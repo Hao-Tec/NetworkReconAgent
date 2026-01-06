@@ -31,7 +31,7 @@ from scanner import (
 from banner import print_banner
 from reporter import save_report
 
-console = Console()
+console = Console(force_terminal=True, legacy_windows=False)
 
 
 def parse_args() -> argparse.Namespace:
