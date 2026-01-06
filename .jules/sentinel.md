@@ -1,0 +1,4 @@
+## 2024-02-14 - Terminal Injection via ANSI Escape Codes
+**Vulnerability:** The application was vulnerable to Terminal Injection. It failed to sanitize ANSI escape codes from untrusted external inputs (Server headers, X-Powered-By headers, HTML Titles, and service banners) before printing them to the console using the `rich` library.
+**Learning:** `rich.markup.escape()` only escapes internal markup tags but preserves raw ANSI escape codes. This allows malicious servers to potentially manipulate the user's terminal (hide text, spoof output, clear screen) by embedding escape sequences in response headers or banners.
+**Prevention:** Implemented a strict `_strip_ansi` function using regex `r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])"` and applied it to all untrusted inputs (`_fingerprint_web_response` and `BannerGrabber.grab_banner`) before display or logging.
