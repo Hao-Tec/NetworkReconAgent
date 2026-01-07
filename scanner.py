@@ -793,43 +793,55 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
             for path in check_paths:
                 target_url = f"{base_url}{path}"
                 try:
-                    response = self.session.get(
+                    # Stream response to avoid DoS from large bodies
+                    with self.session.get(
                         target_url,
                         timeout=self.timeout,
                         allow_redirects=True,
                         verify=False,
-                    )
+                        stream=True,
+                    ) as response:
+                        # Limit read to first 10KB
+                        content = b""
+                        for chunk in response.iter_content(chunk_size=1024):
+                            content += chunk
+                            if len(content) > 10240:
+                                # Force close the raw connection to prevent requests/urllib3
+                                # from trying to download the rest of the body for connection reuse.
+                                response.raw.close()
+                                break
+                        text = content.decode("utf-8", errors="ignore")
 
-                    # Fingerprinting logic
-                    fingerprint = self._identify_service(response)
+                        # Fingerprinting logic
+                        fingerprint = self._identify_service(response, text)
 
-                    if response.status_code in (200, 401, 403) or (
-                        300 <= response.status_code < 400
-                    ):
-                        # FALSE POSITIVE CHECK: Wildcard / Soft 404 detection
-                        # If we found a 200 OK, check if a random path also
-                        # returns 200 OK with same content
-                        if response.status_code == 200 and self._is_wildcard_response(
-                            base_url, response
+                        if response.status_code in (200, 401, 403) or (
+                            300 <= response.status_code < 400
                         ):
-                            # matches wildcard behavior -> likely just a router login page
-                            # for *any* URL
-                            continue
+                            # FALSE POSITIVE CHECK: Wildcard / Soft 404 detection
+                            # If we found a 200 OK, check if a random path also
+                            # returns 200 OK with same content
+                            if response.status_code == 200 and self._is_wildcard_response(
+                                base_url, text
+                            ):
+                                # matches wildcard behavior -> likely just a router login page
+                                # for *any* URL
+                                continue
 
-                        status_type = (
-                            "FOUND" if path == self.check_path else "ROOT_ONLY"
-                        )
-                        # Special case: if we found Moodle explicitly in the fingerprint,
-                        # upgrade confidence
-                        if "Moodle" in fingerprint and status_type == "ROOT_ONLY":
-                            status_type = "FOUND_MATCH"
+                            status_type = (
+                                "FOUND" if path == self.check_path else "ROOT_ONLY"
+                            )
+                            # Special case: if we found Moodle explicitly in the fingerprint,
+                            # upgrade confidence
+                            if "Moodle" in fingerprint and status_type == "ROOT_ONLY":
+                                status_type = "FOUND_MATCH"
 
-                        return (
-                            status_type,
-                            target_url,
-                            response.status_code,
-                            fingerprint,
-                        )
+                            return (
+                                status_type,
+                                target_url,
+                                response.status_code,
+                                fingerprint,
+                            )
 
                 except requests.RequestException:
                     # network/HTTP error for this URL - try next
@@ -838,35 +850,45 @@ class ServiceVerifier:  # pylint: disable=too-few-public-methods
         # Nothing found
         return ("NOT_FOUND", "", 0, "")
 
-    def _is_wildcard_response(
-        self, base_url: str, original_response: requests.Response
-    ) -> bool:
+    def _is_wildcard_response(self, base_url: str, original_text: str) -> bool:
         """
         Checks if the server returns 200 for random paths (wildcard/soft 404).
         """
         random_path = f"/{uuid.uuid4().hex}"
         try:
-            test_resp = self.session.get(
+            with self.session.get(
                 f"{base_url}{random_path}",
                 timeout=self.timeout,
                 allow_redirects=True,
                 verify=False,
-            )
-            # If random path also gives 200 and similar content length, it's a wildcard
-            if (
-                test_resp.status_code == 200
-                and abs(len(test_resp.text) - len(original_response.text)) < 100
-            ):
-                return True
+                stream=True,
+            ) as test_resp:
+                # Limit read to first 10KB
+                content = b""
+                for chunk in test_resp.iter_content(chunk_size=1024):
+                    content += chunk
+                    if len(content) > 10240:
+                        test_resp.raw.close()
+                        break
+                test_text = content.decode("utf-8", errors="ignore")
+
+                # If random path also gives 200 and similar content length, it's a wildcard
+                if (
+                    test_resp.status_code == 200
+                    and abs(len(test_text) - len(original_text)) < 100
+                ):
+                    return True
         except requests.RequestException:
             pass
         return False
 
-    def _identify_service(self, response: requests.Response) -> str:
+    def _identify_service(self, response: requests.Response, text: str = None) -> str:
         """
         Identifies the web service/technology from response headers and body.
         """
-        return _fingerprint_web_response(dict(response.headers), response.text)
+        if text is None:
+            text = response.text
+        return _fingerprint_web_response(dict(response.headers), text)
 
 
 # Async version for Phase 2
@@ -911,8 +933,10 @@ class AsyncServiceVerifier:  # pylint: disable=too-few-public-methods
                         async with session.get(
                             target_url, allow_redirects=True
                         ) as response:
-                            # Get response body
-                            text = await response.text()
+                            # Get response body (limited)
+                            data = await response.content.read(10240)
+                            text = data.decode("utf-8", errors="ignore")
+
                             fingerprint = self._identify_service_from_text(
                                 response, text
                             )
@@ -957,7 +981,8 @@ class AsyncServiceVerifier:  # pylint: disable=too-few-public-methods
         random_path = f"/{uuid.uuid4().hex}"
         try:
             async with session.get(f"{base_url}{random_path}") as test_resp:
-                test_text = await test_resp.text()
+                data = await test_resp.content.read(10240)
+                test_text = data.decode("utf-8", errors="ignore")
                 if (
                     test_resp.status == 200
                     and abs(len(test_text) - len(original_text)) < 100
