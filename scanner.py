@@ -602,14 +602,40 @@ class HostDiscovery:  # pylint: disable=too-few-public-methods
             return None
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_ip = {executor.submit(ping_host, ip): ip for ip in hosts}
+            # OPTIMIZATION: Use bounded submission to prevent memory explosion on large subnets.
+            # Instead of submitting all 65k+ tasks at once (O(N) memory), we keep
+            # a buffer of max_workers * 2 tasks.
+            pending = set()
+            host_iter = iter(hosts)
 
-            for future in concurrent.futures.as_completed(future_to_ip):
-                result = future.result()
-                if result:
-                    live_hosts.append(result)
-                if progress_callback:
-                    progress_callback()
+            # Initial fill
+            while len(pending) < max_workers * 2:
+                try:
+                    ip = next(host_iter)
+                    pending.add(executor.submit(ping_host, ip))
+                except StopIteration:
+                    break
+
+            while pending:
+                # Wait for at least one task to complete
+                done, pending = concurrent.futures.wait(
+                    pending, return_when=concurrent.futures.FIRST_COMPLETED
+                )
+
+                for future in done:
+                    result = future.result()
+                    if result:
+                        live_hosts.append(result)
+                    if progress_callback:
+                        progress_callback()
+
+                # Refill the queue
+                while len(pending) < max_workers * 2:
+                    try:
+                        ip = next(host_iter)
+                        pending.add(executor.submit(ping_host, ip))
+                    except StopIteration:
+                        break
 
         return live_hosts
 
