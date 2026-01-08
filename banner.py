@@ -28,9 +28,12 @@ from rich.spinner import Spinner
 
 console = Console(force_terminal=True, legacy_windows=False)
 
-# Custom block spinner using more universal Unicode characters
-BLOCK_SPINNER = Spinner(
-    [
+# Register custom spinner
+from rich.spinner import SPINNERS
+
+SPINNERS["custom_block"] = {
+    "interval": 80,
+    "frames": [
         "█▒▒▒▒▒▒",
         "██▒▒▒▒▒",
         "███▒▒▒▒",
@@ -46,8 +49,10 @@ BLOCK_SPINNER = Spinner(
         "▒▒▒▒▒▒█",
         "▒▒▒▒▒▒▒",
     ],
-    speed=1.0,
-)
+}
+
+# Custom block spinner using more universal Unicode characters
+BLOCK_SPINNER = Spinner("custom_block", speed=1.0)
 
 def matrix_rain(duration=3.0):
     """
