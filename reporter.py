@@ -55,8 +55,8 @@ def _save_csv(data: Dict[str, Any], filename: str) -> None:
         # We'll focus on the 'hosts' list for the main CSV content
 
         for host in data.get("hosts", []):
-            ip = host.get("ip")
-            mac = host.get("mac", "")
+            ip = _sanitize_csv_cell(host.get("ip"))
+            mac = _sanitize_csv_cell(host.get("mac", ""))
 
             # If services found, create a row for each service
             services = host.get("services", [])
@@ -66,7 +66,7 @@ def _save_csv(data: Dict[str, Any], filename: str) -> None:
                         "ip": ip,
                         "mac": mac,
                         "port": svc.get("port"),
-                        "url": svc.get("url"),
+                        "url": _sanitize_csv_cell(svc.get("url")),
                         "status": svc.get("status"),
                         "fingerprint": _sanitize_csv_cell(svc.get("fingerprint")),
                         "type": "Web Service"
