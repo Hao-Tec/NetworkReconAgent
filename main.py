@@ -6,6 +6,8 @@ scan ports and verify presence of web services.
 
 import os
 import sys
+import platform
+import shlex
 
 # Force UTF-8 encoding on Windows to fix Unicode rendering in Admin terminals
 if sys.platform == "win32":
@@ -572,24 +574,45 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print(Fore.RED + "\n[!] Interrupted by user." + Style.RESET_ALL)
+        console.print(
+            Panel("Scan interrupted by user.", title="STOPPED", border_style="yellow")
+        )
         sys.exit(0)
     except PermissionError:
-        print(
-            Fore.RED
-            + "\n[!] PERMISSION ERROR: Access Denied."
-            + "\n    This tool requires Administrator privileges for network scanning."
-            + "\n    Please restart your terminal as Administrator."
-            + Style.RESET_ALL
+        if platform.system() != "Windows":
+            # Reconstruct command with sudo
+            ARGS = " ".join(shlex.quote(arg) for arg in sys.argv)
+            CMD = f"sudo {sys.executable} {ARGS}"
+            HINT = f"Try running:\n[bold white]{CMD}[/bold white]"
+        else:
+            HINT = (
+                "Right-click your terminal and select "
+                "[bold white]'Run as Administrator'[/bold white]"
+            )
+
+        ERROR_TEXT = Text()
+        ERROR_TEXT.append(
+            "Access Denied: Administrator privileges required.\n\n", style="bold red"
         )
+        ERROR_TEXT.append(
+            "Network scanning (ARP/ICMP) requires elevated permissions.\n\n",
+            style="yellow",
+        )
+        ERROR_TEXT.append(f"{HINT}")
+
+        console.print(Panel(ERROR_TEXT, title="PERMISSION ERROR", border_style="red"))
         sys.exit(1)
     except Exception as e:  # pylint: disable=broad-exception-caught
         if "--debug" in sys.argv:
             raise
-        print(
-            Fore.RED
-            + f"\n[!] Unexpected Error: {e}"
-            + "\n    Use --debug to see full traceback."
-            + Style.RESET_ALL
+        console.print(
+            Panel(
+                Text.from_markup(
+                    f"[bold red]Unexpected Error:[/bold red] {escape(str(e))}\n\n"
+                    "[yellow]Use --debug to see full traceback.[/yellow]"
+                ),
+                title="ERROR",
+                border_style="red",
+            )
         )
         sys.exit(1)

@@ -1,3 +1,3 @@
-## 2024-05-24 - [Graceful Degradation over Hard Fails]
-**Learning:** The application was configured to crash immediately with a `PermissionError` when run without Admin privileges, despite claiming to support a fallback mode. This creates a hostile user experience ("you did it wrong") instead of a helpful one ("let me fix that for you"). Users expect tools to be resilient and do their best with available permissions.
-**Action:** Implement automatic fallbacks for privileged operations (like raw socket scanning) to unprivileged alternatives (like Ping/Connect), informing the user of the downgrade rather than exiting.
+## 2024-05-23 - OS-Aware Error Messages
+**Learning:** Generic "Access Denied" messages cause user friction. By detecting the OS (Windows vs Linux) and dynamically suggesting the specific fix (`sudo ...` command vs "Run as Administrator"), we turn a blocker into an actionable step.
+**Action:** Always check `platform.system()` when handling `PermissionError` in CLI tools to provide copy-pasteable solutions.
