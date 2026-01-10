@@ -24,13 +24,14 @@ from rich.layout import Layout
 from rich.live import Live
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.align import Align
-from rich.spinner import Spinner
+from rich.spinner import Spinner, SPINNERS
 
 console = Console(force_terminal=True, legacy_windows=False)
 
 # Custom block spinner using more universal Unicode characters
-BLOCK_SPINNER = Spinner(
-    [
+SPINNERS["custom_block"] = {
+    "interval": 80,
+    "frames": [
         "█▒▒▒▒▒▒",
         "██▒▒▒▒▒",
         "███▒▒▒▒",
@@ -45,9 +46,9 @@ BLOCK_SPINNER = Spinner(
         "▒▒▒▒▒██",
         "▒▒▒▒▒▒█",
         "▒▒▒▒▒▒▒",
-    ],
-    speed=1.0,
-)
+    ]
+}
+BLOCK_SPINNER = Spinner("custom_block", speed=1.0)
 
 def matrix_rain(duration=3.0):
     """
