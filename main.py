@@ -572,24 +572,35 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print(Fore.RED + "\n[!] Interrupted by user." + Style.RESET_ALL)
+        console.print(
+            Panel(
+                Text("Scan interrupted by user.", style="bold white"),
+                title="[bold red]Process Terminated[/bold red]",
+                border_style="red",
+            )
+        )
         sys.exit(0)
     except PermissionError:
-        print(
-            Fore.RED
-            + "\n[!] PERMISSION ERROR: Access Denied."
-            + "\n    This tool requires Administrator privileges for network scanning."
-            + "\n    Please restart your terminal as Administrator."
-            + Style.RESET_ALL
+        console.print(
+            Panel(
+                Text(
+                    "This tool requires Administrator privileges for network scanning.\n"
+                    "Please restart your terminal as Administrator.",
+                    style="yellow",
+                ),
+                title="[bold red]PERMISSION DENIED[/bold red]",
+                border_style="red",
+            )
         )
         sys.exit(1)
     except Exception as e:  # pylint: disable=broad-exception-caught
         if "--debug" in sys.argv:
             raise
-        print(
-            Fore.RED
-            + f"\n[!] Unexpected Error: {e}"
-            + "\n    Use --debug to see full traceback."
-            + Style.RESET_ALL
+        console.print(
+            Panel(
+                Text(f"{e}\nUse --debug to see full traceback.", style="white"),
+                title="[bold red]Unexpected Error[/bold red]",
+                border_style="red",
+            )
         )
         sys.exit(1)
