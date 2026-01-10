@@ -4,6 +4,7 @@ Handles the export of scan results to various formats (JSON, CSV).
 """
 import json
 import csv
+import os
 from typing import Dict, Any
 
 
@@ -14,7 +15,14 @@ def save_report(data: Dict[str, Any], filename: str) -> None:
     Args:
         data: The dictionary containing scan results.
         filename: The path to save the file to.
+
+    Raises:
+        ValueError: If the filename is a symlink (security check).
     """
+    # Security: Prevent writing to symlinks to avoid privilege escalation/overwrites
+    if os.path.islink(filename):
+        raise ValueError(f"Security Error: Output file '{filename}' is a symlink. Aborting save.")
+
     if filename.lower().endswith(".json"):
         _save_json(data, filename)
     elif filename.lower().endswith(".csv"):
